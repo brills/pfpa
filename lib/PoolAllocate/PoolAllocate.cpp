@@ -1271,9 +1271,10 @@ PoolAllocate::ProcessFunctionBody(Function &F, Function &NewF) {
   // function.
   //
   for (unsigned index = 0; index < LocalNodes.size(); ++index) {
+	  
     if (FI.MarkedNodes.count (LocalNodes[index]) == 0) {
       FI.NodesToPA.push_back (LocalNodes[index]);
-    }
+	}
   }
 
   //

@@ -172,6 +172,27 @@ static void InitPrintNumPools() {
 #define DO_IF_PNP(X)
 #endif
 
+
+//HACKED
+FILE *PF; //initialized in first call of poolinit;
+template<typename PoolTraits>
+static void PFPrintPoolStats(PoolTy<PoolTraits> *Pool) {
+  fprintf(PF,
+          "%d\t%d\t%d "
+          "%d\t%d\t%d\n",
+          Pool->DSID, Pool->BytesAllocated, Pool->NumObjects,
+          Pool->NumObjects ? Pool->BytesAllocated/Pool->NumObjects : 0,
+          Pool->AllocSize, Pool->DeclaredSize);
+}
+
+template<typename PoolTraits>
+static void PFPrintLivePoolStats() {
+  for (unsigned i = 0; i != NumLivePools; ++i) {
+    PFPrintPoolStats((PoolTy<PoolTraits>*)PoolIDs[i].PD);
+  }
+}
+
+
 //===----------------------------------------------------------------------===//
 //  PoolSlab implementation
 //===----------------------------------------------------------------------===//
@@ -521,6 +542,16 @@ static void poolinit_internal(PoolTy<PoolTraits> *Pool, unsigned DSID,
 #endif
   DO_IF_PNP(++PoolsInited);  // Track # pools initialized
   DO_IF_PNP(InitPrintNumPools<PoolTraits>());
+
+  //HACKED
+  static bool FirstCall = true;
+  if (FirstCall) {
+	  PF = fopen("pfpa.out","w+");
+	  fprintf(PF, "DSID\tAllocSZ\t#Obj\tAvgObjSz\tNextSz\tDclrSz\n");
+	  atexit(PFPrintLivePoolStats<PoolTraits>);
+	  FirstCall = false;
+  }
+
 }
 
 void poolinit(PoolTy<NormalPoolTraits> *Pool, unsigned DSID,
@@ -549,7 +580,8 @@ void pooldestroy(PoolTy<NormalPoolTraits> *Pool) {
   DO_IF_TRACE(fprintf(stderr, "[%d] pooldestroy", PID));
 #endif
   DO_IF_POOLDESTROY_STATS(PrintPoolStats(Pool));
-  fprintf(stderr, "pool DSID = %d destroyed\n", Pool->DSID);
+  PFPrintPoolStats(Pool);
+  //fprintf(stderr, "pool DSID = %d destroyed\n", Pool->DSID);
 
   // Free all allocated slabs.
   PoolSlab<NormalPoolTraits> *PS = Pool->Slabs;
@@ -1196,3 +1228,5 @@ void poolaccesstrace(void *Ptr, void *PD) {
 #endif
   fprintf(FD, "\t%lu\n", (intptr_t)Ptr);
 }
+
+
