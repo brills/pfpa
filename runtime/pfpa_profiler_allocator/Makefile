@@ -1,5 +1,5 @@
 LEVEL = ../..
-LIBRARYNAME=poolalloc_rt
+LIBRARYNAME=pfpa_profiler_rt
 
 #
 # Build shared libraries on all platforms except Cygwin and MingW (which do

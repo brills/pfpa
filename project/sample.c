@@ -40,12 +40,12 @@ void splitclone (struct list *L, struct list1 **R1, struct list1 **R2) {
 }
 
 void processlist(struct list *L) {
-	struct list1 *A, *B, *tmp;
+	struct list1 *A, *B, *tmp1, *tmp2;
 	splitclone(L, &A, &B);
 	printlist(A);
 	printlist(B);
-//	while (A) {tmp = A->next; free(A); A=tmp;}
-//	while (B) {tmp = B->next; free(B); B=tmp;}
+	while (A) {tmp1 = A->next; free(A); A=tmp1;}
+	while (B) {tmp2 = B->next; free(B); B=tmp2;}
 }
 
 void generatelist(struct list **L, int length) {

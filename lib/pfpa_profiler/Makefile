@@ -6,7 +6,7 @@ LEVEL=../..
 #
 # Give the name of a library.  This will build a dynamic version.
 #
-LIBRARYNAME=poolalloc
+LIBRARYNAME=pfpa_profiler
 BUILD_ARCHIVE := 1
 ifneq ($(OS),Cygwin)
 ifneq ($(OS),MingW)
