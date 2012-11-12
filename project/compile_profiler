@@ -1,0 +1,8 @@
+#!/bin/bash
+
+#cd /y/students/lubbenb/projects3/poolalloc/samplecode
+clang -emit-llvm -O0 $1.c -c -o $1.bc
+opt -load ./LLVMDataStructure.so -load ./pfpa_profiler.so -dsa-eq -dsa-eqtd -paheur-AllButUnreachableFromMemory -poolalloc < $1.bc > $1.profiler.bc
+#opt -load ./LLVMDataStructure.so -load ./poolalloc.so -paheur-CyclicNodes -poolalloc < $1.bc > $1.poolalloc.bc
+clang $1.profiler.bc -o $1 -L. -lpfpa_profiler_rt -Wl,-rpath .
+

@@ -6,6 +6,6 @@ LEVEL=..
 #
 # List all of the subdirectories that we will compile.
 #
-DIRS=FreeListAllocator FL2Allocator PreRT DynCount DynamicTypeChecks pfpa_profiler_allocator
+DIRS=FreeListAllocator FL2Allocator PreRT DynCount DynamicTypeChecks pfpa_profiler_allocator pfpa_optimizer_allocator
 
 include $(LEVEL)/Makefile.common

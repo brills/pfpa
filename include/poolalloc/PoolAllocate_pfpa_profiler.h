@@ -211,6 +211,9 @@ class PoolAllocate : public PoolAllocateGroup {
   // Map a cloned function to its original function
   std::map<const Function*, Function*> CloneToOrigMap;
 
+  // Hacked:
+  int DSID;
+
 public:
 
   Constant *PoolInit, *PoolDestroy, *PoolAlloc, *PoolRealloc, *PoolMemAlign, *PoolThreadWrapper;

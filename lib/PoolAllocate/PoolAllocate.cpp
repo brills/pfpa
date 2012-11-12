@@ -19,7 +19,7 @@
 #include "dsa/DataStructure.h"
 #include "dsa/DSGraph.h"
 #include "poolalloc/Heuristic.h"
-#include "poolalloc/PoolAllocate_pfpa_profiler.h"
+#include "poolalloc/PoolAllocate.h"
 #include "poolalloc/RuntimeChecks.h"
 #include "llvm/Constants.h"
 #include "llvm/DerivedTypes.h"
@@ -225,9 +225,6 @@ void PoolAllocate::getAnalysisUsage(AnalysisUsage &AU) const {
 bool PoolAllocate::runOnModule(Module &M) {
   if (M.begin() == M.end()) return false;
   CurModule = &M;
-
-  //HACKED
-  DSID = 0;
 
   //
   // Get pointers to 8 and 32 bit LLVM integer types.
@@ -454,15 +451,9 @@ void PoolAllocate::AddPoolPrototypes(Module* M) {
 
   
   // Get poolinit function.
-  //PoolInit = M->getOrInsertFunction("poolinit", VoidType,
-  //                                          PoolDescPtrTy, Int32Type,
-  //                                         Int32Type, NULL);
-
-  // HACKED: the second parameter is the ID for a certain DS
   PoolInit = M->getOrInsertFunction("poolinit", VoidType,
-                                            PoolDescPtrTy, Int32Type, Int32Type,
+                                            PoolDescPtrTy, Int32Type,
                                             Int32Type, NULL);
-
 
   // Get pooldestroy function.
   PoolDestroy = M->getOrInsertFunction("pooldestroy", VoidType,
@@ -1109,14 +1100,7 @@ GlobalVariable *PoolAllocate::CreateGlobalPool(unsigned RecSize, unsigned Align,
 
   Value *ElSize = ConstantInt::get(Int32Type, RecSize);
   Value *AlignV = ConstantInt::get(Int32Type, Align);
-  
-  //Hacked: DSID: unique, consistent ID for a DS.
-  Value *DSIDV =  ConstantInt::get(Int32Type, DSID++);
-
-  Value* Opts[4] = {GV, DSIDV, ElSize, AlignV};
-
-//  Value* Opts[3] = {GV, ElSize, AlignV};
-
+  Value* Opts[3] = {GV, ElSize, AlignV};
   CallInst::Create(PoolInit, Opts, "", InsertPt);
   ++NumPools;
   return GV;
@@ -1271,10 +1255,9 @@ PoolAllocate::ProcessFunctionBody(Function &F, Function &NewF) {
   // function.
   //
   for (unsigned index = 0; index < LocalNodes.size(); ++index) {
-	  
     if (FI.MarkedNodes.count (LocalNodes[index]) == 0) {
       FI.NodesToPA.push_back (LocalNodes[index]);
-	}
+    }
   }
 
   //
@@ -1525,15 +1508,8 @@ void PoolAllocate::InitializeAndDestroyPool(Function &F, const DSNode *Node,
   unsigned AlignV = Heuristic::getRecommendedAlignment(Node);
   Value *Align  = ConstantInt::get(Int32Type, AlignV);
 
-  //Hacked
-  Value *DSIDV =  ConstantInt::get(Int32Type, DSID++);
-
-
-
   for (unsigned i = 0, e = PoolInitPoints.size(); i != e; ++i) {
-	//Hacked
-    //Value* Opts[3] = {PD, ElSize, Align};
-	  Value* Opts[4] = {PD, DSIDV, ElSize, Align};
+    Value* Opts[3] = {PD, ElSize, Align};
     CallInst::Create(PoolInit, Opts,  "", PoolInitPoints[i]);
     DEBUG(errs() << PoolInitPoints[i]->getParent()->getName().str() << " ");
   }
