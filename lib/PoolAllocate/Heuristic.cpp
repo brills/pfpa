@@ -18,7 +18,7 @@
 
 #include "dsa/DSGraphTraits.h"
 #include "poolalloc/Heuristic.h"
-#include "poolalloc/PoolAllocate_pfpa_profiler.h"
+#include "poolalloc/PoolAllocate.h"
 #include "llvm/Instructions.h"
 #include "llvm/Module.h"
 #include "llvm/ADT/DepthFirstIterator.h"

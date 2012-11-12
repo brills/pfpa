@@ -31,17 +31,13 @@ typedef unsigned long uintptr_t;
 #define NDEBUG
 #endif
 
-#define PRINT_NUM_POOLS         // Print a full trace
-#define ENABLE_POOL_IDS
-#define PRINT_POOL_TRACE         // Print a full trace
-//#define PRINT_POOLDESTROY_STATS
-
 #ifndef NDEBUG
 // Configuration macros.  Define up to one of these.
 #define PRINT_NUM_POOLS          // Print use dynamic # pools info
-#define PRINT_POOLDESTROY_STATS  // When pools are destroyed, print stats
-#define PRINT_POOL_TRACE         // Print a full trace
+//#define PRINT_POOLDESTROY_STATS  // When pools are destroyed, print stats
+//#define PRINT_POOL_TRACE         // Print a full trace
 #define ENABLE_POOL_IDS            // PID for access/pool traces
+
 
 // ALWAYS_USE_MALLOC_FREE - Make poolalloc/free always call malloc/free.  Note
 // that if the poolfree optimization is in use that this will cause memory
@@ -112,7 +108,7 @@ static unsigned removePoolNumber(void *PD) {
   return 0;
 }
 
-//static void PrintPoolStats(void *Pool);
+static void PrintPoolStats(void *Pool);
 template<typename PoolTraits>
 static void PrintLivePoolInfo() {
   for (unsigned i = 0; i != NumLivePools; ++i) {
@@ -129,9 +125,9 @@ static void PrintLivePoolInfo() {
 template<typename PoolTraits>
 static void PrintPoolStats(PoolTy<PoolTraits> *Pool) {
   fprintf(stderr,
-          "(0x%p) BytesAlloc=%d  NumObjs=%d"
+          "(0x%X) BytesAlloc=%d  NumObjs=%d"
           " AvgObjSize=%d  NextAllocSize=%d  DeclaredSize=%d\n",
-          (void*)Pool, Pool->BytesAllocated, Pool->NumObjects,
+          Pool, Pool->BytesAllocated, Pool->NumObjects,
           Pool->NumObjects ? Pool->BytesAllocated/Pool->NumObjects : 0,
           Pool->AllocSize, Pool->DeclaredSize);
 }
@@ -250,7 +246,6 @@ public:
 // create - Create a new (empty) slab and add it to the end of the Pools list.
 template<typename PoolTraits>
 void PoolSlab<PoolTraits>::create(PoolTy<PoolTraits> *Pool, unsigned SizeHint) {
-  fprintf(stderr, "SizeHint:%d\n", SizeHint);
   if (Pool->DeclaredSize == 0) {
     unsigned Align = Pool->Alignment;
     if (SizeHint < sizeof(FreedNodeHeader<PoolTraits>) - 
@@ -260,7 +255,6 @@ void PoolSlab<PoolTraits>::create(PoolTy<PoolTraits> *Pool, unsigned SizeHint) {
     SizeHint = SizeHint+sizeof(FreedNodeHeader<PoolTraits>)+(Align-1);
     SizeHint = (SizeHint & ~(Align-1))-sizeof(FreedNodeHeader<PoolTraits>);
     Pool->DeclaredSize = SizeHint;
-    fprintf(stderr, "DeclaredSize:%d\n", SizeHint);
   }
 
   unsigned Size = Pool->AllocSize;
@@ -385,8 +379,8 @@ void poolinit_bp(PoolTy<NormalPoolTraits> *Pool, unsigned ObjAlignment) {
   unsigned PID;
   PID = addPoolNumber(Pool);
 
-  DO_IF_TRACE(fprintf(stderr, "[%d] poolinit_bp(0x%p, %d)\n",
-                      PID, (void*)Pool, ObjAlignment));
+  DO_IF_TRACE(fprintf(stderr, "[%d] poolinit_bp(0x%X, %d)\n",
+                      PID, Pool, ObjAlignment));
 #endif
   DO_IF_PNP(++PoolsInited);  // Track # pools initialized
   DO_IF_PNP(InitPrintNumPools<NormalPoolTraits>());
@@ -440,7 +434,7 @@ LargeObject:
   LAH->Size = NumBytes;
   LAH->Marker = ~0U;
   LAH->LinkIntoList(&Pool->LargeArrays);
-  DO_IF_TRACE(fprintf(stderr, "%p  [large]\n", (void*)(LAH+1)));
+  DO_IF_TRACE(fprintf(stderr, "%p  [large]\n", LAH+1));
   pthread_mutex_unlock(&Pool->pool_lock);
   return LAH+1;
 }
@@ -514,9 +508,9 @@ static void poolinit_internal(PoolTy<PoolTraits> *Pool,
 #ifdef ENABLE_POOL_IDS
   unsigned PID;
   PID = addPoolNumber(Pool);
-  DO_IF_TRACE(fprintf(stderr, "[%d] poolinit%s(0x%p, %d, %d)\n",
+  DO_IF_TRACE(fprintf(stderr, "[%d] poolinit%s(0x%X, %d, %d)\n",
                       PID, PoolTraits::getSuffix(),
-                      (void*)Pool, DeclaredSize, ObjAlignment));
+                      Pool, DeclaredSize, ObjAlignment));
 #endif
   DO_IF_PNP(++PoolsInited);  // Track # pools initialized
   DO_IF_PNP(InitPrintNumPools<PoolTraits>());
@@ -577,7 +571,7 @@ static void *poolalloc_internal(PoolTy<PoolTraits> *Pool, unsigned NumBytesA) {
   // structure.  Hand off to the system malloc.
   if (Pool == 0) {
     void *Result = malloc(NumBytes);
-    DO_IF_TRACE(fprintf(stderr, "0x%p [malloc]\n", (void*)Result));
+    DO_IF_TRACE(fprintf(stderr, "0x%X [malloc]\n", Result));
                 return Result;
   }
   DO_IF_PNP(if (Pool->NumObjects == 0) ++PoolCounter);  // Track # pools.
@@ -613,7 +607,7 @@ static void *poolalloc_internal(PoolTy<PoolTraits> *Pool, unsigned NumBytesA) {
     assert(NumBytes == Node->Header.Size);
 
     Node->Header.Size = NumBytes|1;   // Mark as allocated
-    DO_IF_TRACE(fprintf(stderr, "0x%p\n", (void*)(&Node->Header+1)));
+    DO_IF_TRACE(fprintf(stderr, "0x%X\n", &Node->Header+1));
     return &Node->Header+1;
   }
 
@@ -649,7 +643,7 @@ static void *poolalloc_internal(PoolTy<PoolTraits> *Pool, unsigned NumBytesA) {
           NumBytes = FirstNodeSize;
         }
         FirstNode->Header.Size = NumBytes|1;   // Mark as allocated
-        DO_IF_TRACE(fprintf(stderr, "0x%p\n", (void*)(&FirstNode->Header+1)));
+        DO_IF_TRACE(fprintf(stderr, "0x%X\n", &FirstNode->Header+1));
         return &FirstNode->Header+1;
       }
 
@@ -688,7 +682,7 @@ static void *poolalloc_internal(PoolTy<PoolTraits> *Pool, unsigned NumBytesA) {
           NumBytes = FNN->Header.Size;
         }
         FNN->Header.Size = NumBytes|1;   // Mark as allocated
-        DO_IF_TRACE(fprintf(stderr, "0x%p\n",(void*)(&FNN->Header+1)));
+        DO_IF_TRACE(fprintf(stderr, "0x%X\n", &FNN->Header+1));
         return &FNN->Header+1;
       }
     }
@@ -713,7 +707,7 @@ LargeObject:
   LAH->Size = NumBytes;
   LAH->Marker = ~0U;
   LAH->LinkIntoList(&Pool->LargeArrays);
-  DO_IF_TRACE(fprintf(stderr, "0x%p  [large]\n", (void*)(LAH+1)));
+  DO_IF_TRACE(fprintf(stderr, "0x%X  [large]\n", LAH+1));
   return LAH+1;
 }
 
@@ -793,7 +787,7 @@ static void poolfree_internal(PoolTy<PoolTraits> *Pool, void *Node) {
 
 LargeArrayCase:
   LargeArrayHeader *LAH = ((LargeArrayHeader*)Node)-1;
-  DO_IF_TRACE(fprintf(stderr, "%d bytes [large]\n", (int)LAH->Size));
+  DO_IF_TRACE(fprintf(stderr, "%d bytes [large]\n", LAH->Size));
   DO_IF_PNP(CurHeapSize -= LAH->Size);
 
   // Unlink it from the list of large arrays and free it.
@@ -804,15 +798,15 @@ LargeArrayCase:
 template<typename PoolTraits>
 static void *poolrealloc_internal(PoolTy<PoolTraits> *Pool, void *Node,
                                   unsigned NumBytes) {
-  DO_IF_TRACE(fprintf(stderr, "[%d] poolrealloc%s(0x%p, %d) -> ",
+  DO_IF_TRACE(fprintf(stderr, "[%d] poolrealloc%s(0x%X, %d) -> ",
                       getPoolNumber(Pool), PoolTraits::getSuffix(),
-                      (void*)Node, NumBytes));
+                      Node, NumBytes));
 
   // If a null pool descriptor is passed in, this is not a pool allocated data
   // structure.  Hand off to the system realloc.
   if (Pool == 0) {
     void *Result = realloc(Node, NumBytes);
-    DO_IF_TRACE(fprintf(stderr, "0x%p (system realloc)\n", (void*)Result));
+    DO_IF_TRACE(fprintf(stderr, "0x%X (system realloc)\n", Result));
     return Result;
   }
   if (Node == 0) return poolalloc_internal(Pool, NumBytes);
@@ -835,7 +829,7 @@ static void *poolrealloc_internal(PoolTy<PoolTraits> *Pool, void *Node,
     // Copy the min of the new and old sizes over.
     memcpy(New, Node, Size < NumBytes ? Size : NumBytes);
     poolfree_internal(Pool, Node);
-    DO_IF_TRACE(fprintf(stderr, "0x%p (moved)\n", (void*)New));
+    DO_IF_TRACE(fprintf(stderr, "0x%X (moved)\n", New));
     return New;
   }
 
@@ -851,7 +845,7 @@ static void *poolrealloc_internal(PoolTy<PoolTraits> *Pool, void *Node,
   DO_IF_TRACE(if (LAH == NewLAH)
                 fprintf(stderr, "resized in place (system realloc)\n");
               else
-                fprintf(stderr, "0x%p (moved by system realloc)\n", (void*)(NewLAH+1)));
+                fprintf(stderr, "0x%X (moved by system realloc)\n", NewLAH+1));
   NewLAH->LinkIntoList(&Pool->LargeArrays);
   return NewLAH+1;
 }
@@ -1044,7 +1038,7 @@ void *poolinit_pc(PoolTy<CompressedPoolTraits> *Pool,
     // Increase the stagger amount by one node.
     stagger++;
     DO_IF_TRACE(fprintf(stderr, "RESERVED ADDR SPACE: %p -> %p\n",
-                        (void*)Pool->Slabs, (char*)Pool->Slabs+POOLSIZE));
+                        Pool->Slabs, (char*)Pool->Slabs+POOLSIZE));
   }
   PoolSlab<CompressedPoolTraits>::create_for_ptrcomp(Pool, Pool->Slabs,
                                                      POOLSIZE);
@@ -1073,7 +1067,7 @@ void pooldestroy_pc(PoolTy<CompressedPoolTraits> *Pool) {
 
   // Otherwise, just munmap it.
   DO_IF_TRACE(fprintf(stderr, "UNMAPPING ADDR SPACE: %p -> %p\n",
-                      (void*)Pool->Slabs, (char*)Pool->Slabs+POOLSIZE));
+                      Pool->Slabs, (char*)Pool->Slabs+POOLSIZE));
   munmap(Pool->Slabs, POOLSIZE);
 }
 

@@ -181,17 +181,11 @@ struct PoolTy {
 
   // Thread reference count for the pool
   int thread_refcount;
-  
-  // HACKED
-  unsigned DSID;
 };
 
 extern "C" {
-	//HACKED
-  void poolinit(PoolTy<NormalPoolTraits> *Pool, unsigned DSID,
+  void poolinit(PoolTy<NormalPoolTraits> *Pool,
                 unsigned DeclaredSize, unsigned ObjAlignment);
-  //void poolinit(PoolTy<NormalPoolTraits> *Pool, 
-  //             unsigned DeclaredSize, unsigned ObjAlignment);
   void poolmakeunfreeable(PoolTy<NormalPoolTraits> *Pool);
   void pooldestroy(PoolTy<NormalPoolTraits> *Pool);
   void *poolalloc(PoolTy<NormalPoolTraits> *Pool, unsigned NumBytes);

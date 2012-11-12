@@ -6,6 +6,6 @@ LEVEL=..
 #
 # List all of the subdirectories that we will compile.
 #
-DIRS=DSA PoolAllocate AssistDS pfpa_profiler
+DIRS=DSA PoolAllocate AssistDS pfpa_profiler pfpa_optimizer
 
 include $(LEVEL)/Makefile.common

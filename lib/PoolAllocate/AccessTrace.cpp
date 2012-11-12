@@ -15,7 +15,7 @@
 
 #include "dsa/DataStructure.h"
 #include "dsa/DSGraph.h"
-#include "poolalloc/PoolAllocate_pfpa_profiler.h"
+#include "poolalloc/PoolAllocate.h"
 #include "llvm/Instructions.h"
 #include "llvm/Module.h"
 using namespace llvm;

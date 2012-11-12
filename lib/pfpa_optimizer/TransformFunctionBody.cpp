@@ -16,7 +16,7 @@
 #include "dsa/DataStructure.h"
 #include "dsa/DSGraph.h"
 #include "dsa/CallTargets.h"
-#include "poolalloc/PoolAllocate_pfpa_profiler.h"
+#include "poolalloc/PoolAllocate_pfpa_optimizer.h"
 #include "poolalloc/RuntimeChecks.h"
 #include "llvm/Module.h"
 #include "llvm/DerivedTypes.h"

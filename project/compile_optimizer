@@ -2,7 +2,7 @@
 
 #cd /y/students/lubbenb/projects3/poolalloc/samplecode
 clang -emit-llvm -O0 $1.c -c -o $1.bc
-opt -load ./LLVMDataStructure.so -load ./poolalloc.so -dsa-eq -dsa-eqtd -paheur-AllButUnreachableFromMemory -poolalloc < $1.bc > $1.poolalloc.bc
+opt -load ./LLVMDataStructure.so -load ./pfpa_optimizer.so -dsa-eq -dsa-eqtd -paheur-AllButUnreachableFromMemory -poolalloc < $1.bc > $1.optimizer.bc
 #opt -load ./LLVMDataStructure.so -load ./poolalloc.so -paheur-CyclicNodes -poolalloc < $1.bc > $1.poolalloc.bc
-clang $1.poolalloc.bc -o $1 -L. -lpoolalloc_rt -Wl,-rpath .
+clang $1.optimizer.bc -o $1 -L. -lpfpa_optimizer_rt -Wl,-rpath .
 

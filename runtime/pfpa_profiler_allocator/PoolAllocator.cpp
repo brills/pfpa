@@ -31,11 +31,14 @@ typedef unsigned long uintptr_t;
 #define NDEBUG
 #endif
 
+//#ifndef NDEBUG
 // Configuration macros.  Define up to one of these.
 #define PRINT_NUM_POOLS          // Print use dynamic # pools info
 #define PRINT_POOLDESTROY_STATS  // When pools are destroyed, print stats
 #define PRINT_POOL_TRACE         // Print a full trace
 #define ENABLE_POOL_IDS            // PID for access/pool traces
+//#endif
+
 
 // ALWAYS_USE_MALLOC_FREE - Make poolalloc/free always call malloc/free.  Note
 // that if the poolfree optimization is in use that this will cause memory
@@ -168,6 +171,27 @@ static void InitPrintNumPools() {
 #else
 #define DO_IF_PNP(X)
 #endif
+
+
+//HACKED
+FILE *PF; //initialized in first call of poolinit;
+template<typename PoolTraits>
+static void PFPrintPoolStats(PoolTy<PoolTraits> *Pool) {
+  fprintf(PF,
+          "%d\t%d\t%d "
+          "%d\t%d\t%d\n",
+          Pool->DSID, Pool->BytesAllocated, Pool->NumObjects,
+          Pool->NumObjects ? Pool->BytesAllocated/Pool->NumObjects : 0,
+          Pool->AllocSize, Pool->DeclaredSize);
+}
+
+template<typename PoolTraits>
+static void PFPrintLivePoolStats() {
+  for (unsigned i = 0; i != NumLivePools; ++i) {
+    PFPrintPoolStats((PoolTy<PoolTraits>*)PoolIDs[i].PD);
+  }
+}
+
 
 //===----------------------------------------------------------------------===//
 //  PoolSlab implementation
@@ -475,22 +499,24 @@ void pooldestroy_bp(PoolTy<NormalPoolTraits> *Pool) {
 
 // poolinit - Initialize a pool descriptor to empty
 //
+// HACKED
 template<typename PoolTraits>
-static void poolinit_internal(PoolTy<PoolTraits> *Pool,
-                              unsigned DeclaredSize, unsigned ObjAlignment, unsigned InitialSize) {
+static void poolinit_internal(PoolTy<PoolTraits> *Pool, unsigned DSID,
+                              unsigned DeclaredSize, unsigned ObjAlignment) {
+//static void poolinit_internal(PoolTy<PoolTraits> *Pool,
+//                             unsigned DeclaredSize, unsigned ObjAlignment) {
   assert(Pool && "Null pool pointer passed into poolinit!\n");
   memset(Pool, 0, sizeof(PoolTy<PoolTraits>));
-  Pool->InitialSize = InitialSize;
+
+  //HACKED
+  Pool->DSID = DSID;
+
   Pool->thread_refcount = 1;
   pthread_mutex_init(&Pool->pool_lock,NULL);
+  Pool->AllocSize = INITIAL_SLAB_SIZE;
 
   if (ObjAlignment < 4) ObjAlignment = __alignof(double);
   Pool->Alignment = ObjAlignment;
-
-  if(InitialSize==0)
-    Pool->AllocSize = INITIAL_SLAB_SIZE;
-  else 
-    Pool->AllocSize = InitialSize;
 
   // Round the declared size up to an alignment boundary-header size, just like
   // we have to do for objects.
@@ -510,17 +536,27 @@ static void poolinit_internal(PoolTy<PoolTraits> *Pool,
 #ifdef ENABLE_POOL_IDS
   unsigned PID;
   PID = addPoolNumber(Pool);
-  DO_IF_TRACE(fprintf(stderr, "[%d] poolinit%s(0x%p, %d, %d, %d)\n",
+  DO_IF_TRACE(fprintf(stderr, "[%d] poolinit%s(0x%p, %d, %d)\n",
                       PID, PoolTraits::getSuffix(),
-                      (void*)Pool, DeclaredSize, ObjAlignment, InitialSize));
+                      (void*)Pool, DeclaredSize, ObjAlignment));
 #endif
   DO_IF_PNP(++PoolsInited);  // Track # pools initialized
   DO_IF_PNP(InitPrintNumPools<PoolTraits>());
+
+  //HACKED
+  static bool FirstCall = true;
+  if (FirstCall) {
+	  PF = fopen("pfpa.out","w+");
+	  fprintf(PF, "DSID\tAllocSZ\t#Obj\tAvgObjSz\tNextSz\tDclrSz\n");
+	  atexit(PFPrintLivePoolStats<PoolTraits>);
+	  FirstCall = false;
+  }
+
 }
 
-void poolinit(PoolTy<NormalPoolTraits> *Pool,
-              unsigned DeclaredSize, unsigned ObjAlignment, unsigned InitialSize) {
-  poolinit_internal(Pool, DeclaredSize, ObjAlignment, InitialSize);
+void poolinit(PoolTy<NormalPoolTraits> *Pool, unsigned DSID,
+              unsigned DeclaredSize, unsigned ObjAlignment) {
+  poolinit_internal(Pool, DSID, DeclaredSize, ObjAlignment);
 }
 
 // pooldestroy - Release all memory allocated for a pool
@@ -544,6 +580,8 @@ void pooldestroy(PoolTy<NormalPoolTraits> *Pool) {
   DO_IF_TRACE(fprintf(stderr, "[%d] pooldestroy", PID));
 #endif
   DO_IF_POOLDESTROY_STATS(PrintPoolStats(Pool));
+  PFPrintPoolStats(Pool);
+  //fprintf(stderr, "pool DSID = %d destroyed\n", Pool->DSID);
 
   // Free all allocated slabs.
   PoolSlab<NormalPoolTraits> *PS = Pool->Slabs;
@@ -695,8 +733,6 @@ static void *poolalloc_internal(PoolTy<PoolTraits> *Pool, unsigned NumBytesA) {
       abort();
       return 0;
     }
-
-    DO_IF_TRACE(fprintf(stderr, "[Growing pool]"));
 
     // Oops, we didn't find anything on the free list big enough!  Allocate
     // another slab and try again.
@@ -1002,7 +1038,9 @@ static PoolSlab<CompressedPoolTraits> *Pools[4] = { 0, 0, 0, 0 };
 
 void *poolinit_pc(PoolTy<CompressedPoolTraits> *Pool,
                   unsigned DeclaredSize, unsigned ObjAlignment) {
-  poolinit_internal(Pool, DeclaredSize, ObjAlignment, 0);
+//HACKED: we do not use pc
+  poolinit_internal(Pool, 0, DeclaredSize, ObjAlignment);
+//  poolinit_internal(Pool, DeclaredSize, ObjAlignment);
 
   // The number of nodes to stagger in the mmap'ed pool
   static unsigned stagger=0;
@@ -1190,3 +1228,5 @@ void poolaccesstrace(void *Ptr, void *PD) {
 #endif
   fprintf(FD, "\t%lu\n", (intptr_t)Ptr);
 }
+
+
