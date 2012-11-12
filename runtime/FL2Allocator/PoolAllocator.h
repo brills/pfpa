@@ -162,6 +162,10 @@ struct PoolTy {
   // The declared size of the pool, just kept for the record.
   unsigned DeclaredSize;
 
+  // Hacked
+  // Initial size of the pool
+  unsigned InitialSize;
+
   // LargeArrays - A doubly linked list of large array chunks, dynamically
   // allocated with malloc.
   LargeArrayHeader *LargeArrays;
@@ -181,17 +185,11 @@ struct PoolTy {
 
   // Thread reference count for the pool
   int thread_refcount;
-  
-  // HACKED
-  unsigned DSID;
 };
 
 extern "C" {
-	//HACKED
-  void poolinit(PoolTy<NormalPoolTraits> *Pool, unsigned DSID,
-                unsigned DeclaredSize, unsigned ObjAlignment);
-  //void poolinit(PoolTy<NormalPoolTraits> *Pool, 
-  //             unsigned DeclaredSize, unsigned ObjAlignment);
+  void poolinit(PoolTy<NormalPoolTraits> *Pool,
+                unsigned DeclaredSize, unsigned ObjAlignment, unsigned InitialSize);
   void poolmakeunfreeable(PoolTy<NormalPoolTraits> *Pool);
   void pooldestroy(PoolTy<NormalPoolTraits> *Pool);
   void *poolalloc(PoolTy<NormalPoolTraits> *Pool, unsigned NumBytes);
