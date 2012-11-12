@@ -213,7 +213,7 @@ class PoolAllocate : public PoolAllocateGroup {
 
   // Hacked:
   int DSID;
-
+  std::map<unsigned,unsigned> IdToSize;
 public:
 
   Constant *PoolInit, *PoolDestroy, *PoolAlloc, *PoolRealloc, *PoolMemAlign, *PoolThreadWrapper;
@@ -248,7 +248,7 @@ protected:
 		  SAFECodeEnabled = SAFECode |  PA::PA_SAFECODE;
 		  lie_preserve_passes = SAFECodeEnabled ? LIE_PRESERVE_ALL : LIE_PRESERVE_DSA;
 		  dsa_pass_to_use = SAFECodeEnabled ? PASS_EQTD : PASS_BUEQ;
-
+		  initialize();
       }
 
   /*TODO: finish removing the SAFECode flag*/
@@ -272,7 +272,10 @@ protected:
   		  else
   			  dsa_pass_to_use = dsa_pass_to_use_;
 
+                  initialize();
         }
+
+  virtual void initialize();
 
   virtual bool runOnModule(Module &M);
   

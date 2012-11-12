@@ -250,7 +250,6 @@ public:
 // create - Create a new (empty) slab and add it to the end of the Pools list.
 template<typename PoolTraits>
 void PoolSlab<PoolTraits>::create(PoolTy<PoolTraits> *Pool, unsigned SizeHint) {
-  fprintf(stderr, "SizeHint:%d\n", SizeHint);
   if (Pool->DeclaredSize == 0) {
     unsigned Align = Pool->Alignment;
     if (SizeHint < sizeof(FreedNodeHeader<PoolTraits>) - 
@@ -260,12 +259,12 @@ void PoolSlab<PoolTraits>::create(PoolTy<PoolTraits> *Pool, unsigned SizeHint) {
     SizeHint = SizeHint+sizeof(FreedNodeHeader<PoolTraits>)+(Align-1);
     SizeHint = (SizeHint & ~(Align-1))-sizeof(FreedNodeHeader<PoolTraits>);
     Pool->DeclaredSize = SizeHint;
-    fprintf(stderr, "DeclaredSize:%d\n", SizeHint);
   }
 
   unsigned Size = Pool->AllocSize;
   Pool->AllocSize <<= 1;
   Size = (Size+SizeHint-1) / SizeHint * SizeHint;
+
   PoolSlab *PS = (PoolSlab*)malloc(Size+sizeof(PoolSlab<PoolTraits>) +
                                    sizeof(NodeHeader<PoolTraits>) +
                                    sizeof(FreedNodeHeader<PoolTraits>));
@@ -486,12 +485,15 @@ void pooldestroy_bp(PoolTy<NormalPoolTraits> *Pool) {
 //
 template<typename PoolTraits>
 static void poolinit_internal(PoolTy<PoolTraits> *Pool,
-                              unsigned DeclaredSize, unsigned ObjAlignment) {
+                              unsigned DeclaredSize, unsigned ObjAlignment, unsigned InitialSize) {
   assert(Pool && "Null pool pointer passed into poolinit!\n");
   memset(Pool, 0, sizeof(PoolTy<PoolTraits>));
   Pool->thread_refcount = 1;
   pthread_mutex_init(&Pool->pool_lock,NULL);
-  Pool->AllocSize = INITIAL_SLAB_SIZE;
+  if(InitialSize==0)
+    Pool->AllocSize = INITIAL_SLAB_SIZE;
+  else
+    Pool->AllocSize = InitialSize;
 
   if (ObjAlignment < 4) ObjAlignment = __alignof(double);
   Pool->Alignment = ObjAlignment;
@@ -523,8 +525,8 @@ static void poolinit_internal(PoolTy<PoolTraits> *Pool,
 }
 
 void poolinit(PoolTy<NormalPoolTraits> *Pool,
-              unsigned DeclaredSize, unsigned ObjAlignment) {
-  poolinit_internal(Pool, DeclaredSize, ObjAlignment);
+              unsigned DeclaredSize, unsigned ObjAlignment, unsigned InitialSize=0) {
+  poolinit_internal(Pool, DeclaredSize, ObjAlignment, InitialSize);
 }
 
 // pooldestroy - Release all memory allocated for a pool
@@ -573,6 +575,7 @@ static void *poolalloc_internal(PoolTy<PoolTraits> *Pool, unsigned NumBytesA) {
 
   unsigned NumBytes = NumBytesA;
 
+
   // If a null pool descriptor is passed in, this is not a pool allocated data
   // structure.  Hand off to the system malloc.
   if (Pool == 0) {
@@ -596,6 +599,8 @@ static void *poolalloc_internal(PoolTy<PoolTraits> *Pool, unsigned NumBytesA) {
              (Alignment-1);      // Round up
   NumBytes = (NumBytes & ~(Alignment-1)) - 
              sizeof(FreedNodeHeader<PoolTraits>); // Truncate
+
+
 
   DO_IF_PNP(CurHeapSize += (NumBytes + sizeof(NodeHeader<PoolTraits>)));
   DO_IF_PNP(if (CurHeapSize > MaxHeapSize) MaxHeapSize = CurHeapSize);
@@ -628,6 +633,12 @@ static void *poolalloc_internal(PoolTy<PoolTraits> *Pool, unsigned NumBytesA) {
     void *PoolBase = Pool->Slabs;
     FreedNodeHeader<PoolTraits> *FirstNode =
       PoolTraits::IndexToFNHPtr(Pool->OtherFreeList, PoolBase);
+
+    unsigned hs = -1;
+    if (FirstNode)
+      hs = FirstNode->Header.Size;
+    printf("need: %d have: %d \n", NumBytes, hs);
+
     if (FirstNode) {
       unsigned FirstNodeSize = FirstNode->Header.Size;
       if (FirstNodeSize >= NumBytes) {
@@ -699,6 +710,11 @@ static void *poolalloc_internal(PoolTy<PoolTraits> *Pool, unsigned NumBytesA) {
       abort();
       return 0;
     }
+ 
+
+  DO_IF_TRACE(fprintf(stderr, "[%d] poolalloc%s(%d) ->  GROWING POOL ",
+                      getPoolNumber(Pool), PoolTraits::getSuffix(), NumBytesA));
+
 
     // Oops, we didn't find anything on the free list big enough!  Allocate
     // another slab and try again.
@@ -1004,7 +1020,7 @@ static PoolSlab<CompressedPoolTraits> *Pools[4] = { 0, 0, 0, 0 };
 
 void *poolinit_pc(PoolTy<CompressedPoolTraits> *Pool,
                   unsigned DeclaredSize, unsigned ObjAlignment) {
-  poolinit_internal(Pool, DeclaredSize, ObjAlignment);
+  poolinit_internal(Pool, DeclaredSize, ObjAlignment, 0);
 
   // The number of nodes to stagger in the mmap'ed pool
   static unsigned stagger=0;
