@@ -241,7 +241,7 @@ void PoolAllocate::initialize(){
 
     // Takes the max AllocSz for a DSID
     if(IdToSize[DSID] < AllocSz)
-      IdToSize[DSID] = AllocSz;
+      IdToSize[DSID] = (AllocSz + PGSIZE - 1) / PGSIZE;
   }
 
   infile.close();
