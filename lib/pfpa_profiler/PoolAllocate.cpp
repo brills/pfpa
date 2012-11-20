@@ -1304,6 +1304,45 @@ PoolAllocate::ProcessFunctionBody(Function &F, Function &NewF) {
   // them do so here.
   //
   CurHeuristic->HackFunctionBody(NewF, FI.PoolDescriptors);
+
+  //GOAL2, HACKED
+  errs() << "In function " << F.getName() << " :\n";
+  for (Function::iterator BB = F.begin(), BE = F.end();
+		  BB != BE; ++BB)
+	  for (BasicBlock::iterator II = BB->begin(), IE = BB->end();
+			  II != IE; ++II) {
+	  	LoadInst *LI;
+		if ((LI = dyn_cast<LoadInst>(II)) != NULL) {
+			DSNodeHandle PointedNode = G->getNodeForValue(LI->getPointerOperand());
+			DSNode *Node = PointedNode.getNode();
+			if (!PointedNode.isNull()) {
+				if (FI.PoolDescriptors.find(PointedNode.getNode()) != FI.PoolDescriptors.end()) {  
+				errs() << "Load inst: " << (*LI) << "\nloads from pool: " << *FI.PoolDescriptors[PointedNode.getNode()] << "\n\n";
+				// iterate types in the DSNode
+				errs() << "Related DSNode Info: \n";
+				for (DSNode::type_iterator TI = Node->type_begin(),
+						TE = Node->type_end(); TI != TE; ++TI) {
+					errs() << "\t Offset " << TI->first << ": ";
+					
+					for (svset<Type *>::const_iterator SI = TI->second->begin(),
+							SE = TI->second->end();
+							SI != SE; ++SI) {
+						errs() << *(*SI) << ' ';
+					}
+					errs() << '\n';
+				}
+
+
+				}
+				//TODO:
+				//if we know the offset to the base pointer of 
+				//the GEP inst as well as the size of the loaded
+				//member, we can use this information as profile.
+			}
+			
+		}
+	  }
+ 
 }
 
 template<class IteratorTy>
