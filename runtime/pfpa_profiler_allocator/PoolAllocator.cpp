@@ -500,6 +500,7 @@ void pooldestroy_bp(PoolTy<NormalPoolTraits> *Pool) {
 // poolinit - Initialize a pool descriptor to empty
 //
 // HACKED
+
 template<typename PoolTraits>
 static void poolinit_internal(PoolTy<PoolTraits> *Pool, unsigned DSID,
                               unsigned DeclaredSize, unsigned ObjAlignment) {
@@ -557,6 +558,15 @@ static void poolinit_internal(PoolTy<PoolTraits> *Pool, unsigned DSID,
 void poolinit(PoolTy<NormalPoolTraits> *Pool, unsigned DSID,
               unsigned DeclaredSize, unsigned ObjAlignment) {
   poolinit_internal(Pool, DSID, DeclaredSize, ObjAlignment);
+}
+
+void pfpa_collect_memstat(PoolTy<NormalPoolTraits> *Pool, unsigned offset, unsigned size, bool is_load){
+  assert(Pool && "Null pool pointer passed into poolinit!\n");
+  memset(Pool, 0, sizeof(PoolTy<NormalPoolTraits>));
+
+  DO_IF_TRACE(fprintf(stderr, "[%d] pfpa_collect_memstat%s(0x%p, %d, %d, %d)\n",
+                      getPoolNumber(Pool), NormalPoolTraits::getSuffix(),
+                      (void*)Pool, offset, size, is_load));
 }
 
 // pooldestroy - Release all memory allocated for a pool

@@ -192,6 +192,8 @@ extern "C" {
                 unsigned DeclaredSize, unsigned ObjAlignment);
   //void poolinit(PoolTy<NormalPoolTraits> *Pool, 
   //             unsigned DeclaredSize, unsigned ObjAlignment);
+  void pfpa_collect_memstat(PoolTy<NormalPoolTraits> *Pool, unsigned offset, unsigned size, bool is_load);
+  //void pfpa_collect_memstat(PoolTy<NormalPoolTraits> *Pool, unsigned offset, unsigned size, bool is_load);
   void poolmakeunfreeable(PoolTy<NormalPoolTraits> *Pool);
   void pooldestroy(PoolTy<NormalPoolTraits> *Pool);
   void *poolalloc(PoolTy<NormalPoolTraits> *Pool, unsigned NumBytes);

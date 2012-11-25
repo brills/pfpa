@@ -38,6 +38,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/Timer.h"
+#include "llvm/Support/IRBuilder.h"
 
 using namespace llvm;
 using namespace PA;
@@ -233,6 +234,7 @@ bool PoolAllocate::runOnModule(Module &M) {
   // Get pointers to 8 and 32 bit LLVM integer types.
   //
   VoidType  = Type::getVoidTy(M.getContext());
+  Int1Type  = IntegerType::getInt8Ty(M.getContext());
   Int8Type  = IntegerType::getInt8Ty(M.getContext());
   Int32Type = IntegerType::getInt32Ty(M.getContext());
 
@@ -459,10 +461,13 @@ void PoolAllocate::AddPoolPrototypes(Module* M) {
   //                                         Int32Type, NULL);
 
   // HACKED: the second parameter is the ID for a certain DS
+  CollectMemStats = M->getOrInsertFunction("pfpa_collect_memstat", VoidType,
+					    PoolDescPtrTy, Int32Type, Int32Type, 
+                                            Int1Type, NULL);
+
   PoolInit = M->getOrInsertFunction("poolinit", VoidType,
                                             PoolDescPtrTy, Int32Type, Int32Type,
                                             Int32Type, NULL);
-
 
   // Get pooldestroy function.
   PoolDestroy = M->getOrInsertFunction("pooldestroy", VoidType,
@@ -1307,42 +1312,85 @@ PoolAllocate::ProcessFunctionBody(Function &F, Function &NewF) {
 
   //GOAL2, HACKED
   errs() << "In function " << F.getName() << " :\n";
-  for (Function::iterator BB = F.begin(), BE = F.end();
+  for (Function::iterator BB = NewF.begin(), BE = NewF.end();
 		  BB != BE; ++BB)
-	  for (BasicBlock::iterator II = BB->begin(), IE = BB->end();
+    for (BasicBlock::iterator II = BB->begin(), IE = BB->end();
 			  II != IE; ++II) {
-	  	LoadInst *LI;
-		if ((LI = dyn_cast<LoadInst>(II)) != NULL) {
-			DSNodeHandle PointedNode = G->getNodeForValue(LI->getPointerOperand());
-			DSNode *Node = PointedNode.getNode();
-			if (!PointedNode.isNull()) {
-				if (FI.PoolDescriptors.find(PointedNode.getNode()) != FI.PoolDescriptors.end()) {  
-				errs() << "Load inst: " << (*LI) << "\nloads from pool: " << *FI.PoolDescriptors[PointedNode.getNode()] << "\n\n";
-				// iterate types in the DSNode
-				errs() << "Related DSNode Info: \n";
-				for (DSNode::type_iterator TI = Node->type_begin(),
-						TE = Node->type_end(); TI != TE; ++TI) {
-					errs() << "\t Offset " << TI->first << ": ";
-					
-					for (svset<Type *>::const_iterator SI = TI->second->begin(),
+      Instruction* I = II;
+      if(isa<LoadInst>(I) || isa<StoreInst>(I)){
+        //LI = (LoadInst*)FI.ValueMap[LI];
+        const Instruction* OldII = (const Instruction*)FI.NewToOldValueMap[I];
+        // If there is no mapping to a cloned instruction, the function is the original
+        if(OldII==NULL){
+          OldII = II;
+        }
+
+	Value* pointerOperand;
+        DSNodeHandle PointedNode;
+	bool isLoad = false;
+
+	const LoadInst* LI;
+	const StoreInst* SI;
+	if((LI = dyn_cast<LoadInst>(OldII))!=NULL){
+	  isLoad = true;
+	  pointerOperand = ((LoadInst*)I)->getPointerOperand();
+	  PointedNode = G->getNodeForValue(LI->getPointerOperand());
+	} else if((SI = dyn_cast<StoreInst>(OldII))!=NULL){
+	  pointerOperand = ((StoreInst*)I)->getPointerOperand();
+	  PointedNode = G->getNodeForValue(SI->getPointerOperand());
+	}
+
+	DSNode *Node = PointedNode.getNode();
+
+	if (!PointedNode.isNull()) {
+	  if (FI.PoolDescriptors.find(PointedNode.getNode()) != FI.PoolDescriptors.end()) {  
+            Value *PD = FI.PoolDescriptors[PointedNode.getNode()];
+           
+            if (PD == 0 || isa<ConstantPointerNull>(PD)) break; 
+
+	    errs() << "Store/Load inst: " << (*I) << "\nloads/stores from pool: " << *PD << "\n\n";
+            GetElementPtrInst* pi;
+	    if((pi=dyn_cast<GetElementPtrInst>(pointerOperand))!=NULL){
+	      Value* baseAddr = pi->getPointerOperand();
+
+	      IRBuilder<> b(I->getParent());
+	      b.SetInsertPoint(I);
+
+              GetElementPtrInst* getoffset = (GetElementPtrInst*)pi->clone();
+              getoffset->insertBefore(I);
+              getoffset->setOperand(0, ConstantPointerNull::get((PointerType*)baseAddr->getType()));
+
+              Value* getsize = b.CreateGEP(ConstantPointerNull::get((PointerType*)pointerOperand->getType()), ConstantInt::get(Int32Type, 1));
+
+	      Value* size = b.CreatePtrToInt(getsize, Int32Type);
+	      Value* offset = b.CreatePtrToInt(getoffset, Int32Type);
+
+  	      Value* il =  ConstantInt::get(Int1Type, isLoad? 1 : 0);
+
+              b.CreateCall4(CollectMemStats, PD, offset, size, il);
+            }
+
+	    // iterate types in the DSNode
+	    errs() << "Related DSNode Info: \n";
+	    for (DSNode::type_iterator TI = Node->type_begin(),
+					TE = Node->type_end(); TI != TE; ++TI) {
+	      errs() << "\t Offset " << TI->first << ": ";
+	      for (svset<Type *>::const_iterator SI = TI->second->begin(),
 							SE = TI->second->end();
 							SI != SE; ++SI) {
-						errs() << *(*SI) << ' ';
-					}
-					errs() << '\n';
-				}
-
-
-				}
-				//TODO:
-				//if we know the offset to the base pointer of 
-				//the GEP inst as well as the size of the loaded
-				//member, we can use this information as profile.
-			}
-			
-		}
-	  }
- 
+	        errs() << *(*SI) << ' ';
+	      }
+	      errs() << '\n';
+	    }
+          }
+	
+        //TODO:
+	//if we know the offset to the base pointer of 
+	//the GEP inst as well as the size of the loaded
+	//member, we can use this information as profile.
+      }			
+    } 
+  }
 }
 
 template<class IteratorTy>

@@ -141,6 +141,7 @@ class PoolAllocateGroup : public ModulePass {
 protected:
   DataStructures *Graphs;
   Type * VoidType;
+  Type * Int1Type;
   Type * Int8Type;
   Type * Int32Type;
 
@@ -216,7 +217,7 @@ class PoolAllocate : public PoolAllocateGroup {
 
 public:
 
-  Constant *PoolInit, *PoolDestroy, *PoolAlloc, *PoolRealloc, *PoolMemAlign, *PoolThreadWrapper;
+  Constant *CollectMemStats, *PoolInit, *PoolDestroy, *PoolAlloc, *PoolRealloc, *PoolMemAlign, *PoolThreadWrapper;
   Constant *PoolFree;
   Constant *PoolCalloc;
   Constant *PoolStrdup;
