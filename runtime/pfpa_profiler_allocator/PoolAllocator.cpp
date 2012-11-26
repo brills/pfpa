@@ -19,6 +19,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <map>
+#include <utility>
 
 typedef long intptr_t;
 typedef unsigned long uintptr_t;
@@ -174,10 +176,12 @@ static void InitPrintNumPools() {
 
 
 //HACKED
-FILE *PF; //initialized in first call of poolinit;
+FILE *FPS; //initialized in first call of poolinit;
 template<typename PoolTraits>
 static void PFPrintPoolStats(PoolTy<PoolTraits> *Pool) {
-  fprintf(PF,
+	if (!FPS)
+		return;
+  fprintf(FPS,
           "%d\t%d\t%d "
           "%d\t%d\t%d\n",
           Pool->DSID, Pool->BytesAllocated, Pool->NumObjects,
@@ -190,6 +194,26 @@ static void PFPrintLivePoolStats() {
   for (unsigned i = 0; i != NumLivePools; ++i) {
     PFPrintPoolStats((PoolTy<PoolTraits>*)PoolIDs[i].PD);
   }
+}
+
+FILE *FMS; //initialized in first call of poolinit;
+typedef std::map< std::pair<unsigned, std::pair<unsigned, unsigned> >, unsigned> pfpa_memstat_map; 
+pfpa_memstat_map pfpa_load_stat_map;
+pfpa_memstat_map pfpa_store_stat_map;
+static void PFPrintMemStats() {
+	if (!FMS)
+		return;
+	for (pfpa_memstat_map::iterator MI = pfpa_load_stat_map.begin(),
+			ME = pfpa_load_stat_map.end(); MI != ME; ++MI) {
+		fprintf(FMS, "LD %d\t%d\t%d\t%d\n", MI->first.first, MI->first.second.first, MI->first.second.second, MI->second);
+	}
+
+	for (pfpa_memstat_map::iterator MI = pfpa_store_stat_map.begin(),
+			ME = pfpa_store_stat_map.end(); MI != ME; ++MI) {
+		
+		fprintf(FMS, "ST %d\t%d\t%d\t%d\n", MI->first.first, MI->first.second.first, MI->first.second.second, MI->second);
+	}
+
 }
 
 
@@ -547,9 +571,12 @@ static void poolinit_internal(PoolTy<PoolTraits> *Pool, unsigned DSID,
   //HACKED
   static bool FirstCall = true;
   if (FirstCall) {
-	  PF = fopen("pfpa.out","w+");
-	  fprintf(PF, "DSID\tAllocSZ\t#Obj\tAvgObjSz\tNextSz\tDclrSz\n");
+	  FPS = fopen("pfpa.out","w+");
+	  FMS = fopen("pfpa_memstat.out", "w+");
+	  fprintf(FPS, "DSID\tAllocSZ\t#Obj\tAvgObjSz\tNextSz\tDclrSz\n");
+	  fprintf(FMS, "TYPE\tDSID\tOFFSET\tSIZE\tTIME\n");
 	  atexit(PFPrintLivePoolStats<PoolTraits>);
+	  atexit(PFPrintMemStats);
 	  FirstCall = false;
   }
 
@@ -560,9 +587,17 @@ void poolinit(PoolTy<NormalPoolTraits> *Pool, unsigned DSID,
   poolinit_internal(Pool, DSID, DeclaredSize, ObjAlignment);
 }
 
+
 void pfpa_collect_memstat(PoolTy<NormalPoolTraits> *Pool, unsigned offset, unsigned size, bool is_load){
+
   assert(Pool && "Null pool pointer passed into poolinit!\n");
-  memset(Pool, 0, sizeof(PoolTy<NormalPoolTraits>));
+  std::make_pair(Pool->DSID, std::make_pair(offset, size));
+  if (is_load)
+	  pfpa_load_stat_map[std::make_pair(Pool->DSID, std::make_pair(offset, size))]++;
+  else
+	  pfpa_store_stat_map[std::make_pair(Pool->DSID, std::make_pair(offset, size))]++;
+
+ // memset(Pool, 0, sizeof(PoolTy<NormalPoolTraits>));
 
   DO_IF_TRACE(fprintf(stderr, "[%d] pfpa_collect_memstat%s(0x%p, %d, %d, %d)\n",
                       getPoolNumber(Pool), NormalPoolTraits::getSuffix(),
