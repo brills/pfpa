@@ -29,7 +29,7 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/Support/CommandLine.h"
-
+#include "llvm/Target/TargetData.h"
 #include "dsa/DataStructure.h"
 #include "dsa/DSGraph.h"
 #include "dsa/CallTargets.h"
@@ -228,6 +228,7 @@ public:
   static Type *PoolDescPtrTy;
 
   PA::Heuristic *CurHeuristic;
+  TargetData *TD;
 
   /// GlobalNodes - For each node (with an H marker) in the globals graph, this
   /// map contains the global variable that holds the pool descriptor for the
