@@ -214,6 +214,9 @@ class PoolAllocate : public PoolAllocateGroup {
   // Hacked:
   int DSID;
   std::map<unsigned,unsigned> IdToSize;
+  std::map<int, const DSNode *> DSIDToDSNodeMap;
+  std::map<const DSNode *, int> DSNodeToDSIDMap;
+  std::map<int, const Type *> DSIDToTypeMap;
 public:
 
   Constant *PoolInit, *PoolDestroy, *PoolAlloc, *PoolRealloc, *PoolMemAlign, *PoolThreadWrapper;
@@ -330,6 +333,9 @@ protected:
   /// and return a pointer to the global for it.
   GlobalVariable *CreateGlobalPool(unsigned RecSize, unsigned Alignment,
                                    std::string name = "GlobalPool", Instruction *IPHint = 0);
+
+  GlobalVariable *CreateGlobalPool(unsigned RecSize, unsigned Alignment,
+		  unsigned OptimizedSize, std::string name = "GlobalPool", Instruction *IPHint = 0);
 
   /// getPoolType - Return the type of a pool descriptor
   /// FIXME: These constants should be chosen by the client

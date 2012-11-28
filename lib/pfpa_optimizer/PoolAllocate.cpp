@@ -1139,6 +1139,34 @@ GlobalVariable *PoolAllocate::CreateGlobalPool(unsigned RecSize, unsigned Align,
   return GV;
 }
 
+GlobalVariable *PoolAllocate::CreateGlobalPool(unsigned RecSize, unsigned Align, unsigned OptimizedSize,
+                                               std::string name, Instruction *IPHint) {
+  GlobalVariable *GV =
+    new GlobalVariable(*CurModule,
+                       PoolDescType, false, GlobalValue::InternalLinkage, 
+                       ConstantAggregateZero::get(PoolDescType), name);
+
+  // Update the global DSGraph to include this.
+  DSNode *GNode = Graphs->getGlobalsGraph()->addObjectToGraph(GV);
+  GNode->setModifiedMarker()->setReadMarker();
+
+  BasicBlock::iterator InsertPt;
+  if (IPHint)
+    InsertPt = IPHint;
+  else {
+    InsertPt = GlobalPoolCtor->getEntryBlock().begin();
+    while (isa<AllocaInst>(InsertPt)) ++InsertPt;
+  }
+
+  Value *InitialSize = ConstantInt::get(Int32Type, OptimizedSize);
+  Value *ElSize = ConstantInt::get(Int32Type, RecSize);
+  Value *AlignV = ConstantInt::get(Int32Type, Align);
+  Value* Opts[4] = {GV, ElSize, AlignV, InitialSize};
+  CallInst::Create(PoolInit, Opts, "", InsertPt);
+  ++NumPools;
+  return GV;
+}
+
 
 // CreatePools - This creates the pool initialization and destruction code for
 // the DSNodes specified by the NodesToPA list.  This adds an entry to the
@@ -1174,7 +1202,21 @@ PoolAllocate::CreatePools (Function &F, DSGraph* DSG,
   //
   for (unsigned i = 0, e = ResultPools.size(); i != e; ++i) {
     Heuristic::OnePool &Pool = ResultPools[i];
+	// XXX: GOAL2: We assume here one pool has only one DSNode mapped.
+	assert(Pool.NodesInPool.size() == 1);
+	
+	// XXX: We assume here NO other global pools other than the
+	// main's local pools are created. (or they are not assigned 
+	// with a DSID)
+	//
+	DSIDToDSNodeMap[DSID] = Pool.NodesInPool[0];
+	DSNodeToDSIDMap[Pool.NodesInPool[0]] = DSID;
+	++DSID;
+	
     Value *PoolDesc = Pool.PoolDesc;
+	// XXX: GOAL2: Assume here the heuristic will not merge any
+	// other DSNodes into any pools.
+	assert(PoolDesc == 0);
     if (PoolDesc == 0) {
       //
       // Create a pool descriptor for the pool.  The poolinit will be inserted
@@ -1196,7 +1238,7 @@ PoolAllocate::CreatePools (Function &F, DSGraph* DSG,
         NewNode->setModifiedMarker()->setReadMarker();  // This is M/R
 #endif
       } else {
-        PoolDesc = CreateGlobalPool(Pool.PoolSize, Pool.PoolAlignment,
+        PoolDesc = CreateGlobalPool(Pool.PoolSize, Pool.PoolAlignment, IdToSize[DSNodeToDSIDMap[Pool.NodesInPool[0]]],
                                     "PoolForMain", InsertPoint);
 
         // Add the global node to main's graph.
@@ -1541,7 +1583,7 @@ void PoolAllocate::InitializeAndDestroyPool(Function &F, const DSNode *Node,
   Value *ElSize = ConstantInt::get(Int32Type, ElSizeV);
   unsigned AlignV = Heuristic::getRecommendedAlignment(Node);
   Value *Align  = ConstantInt::get(Int32Type, AlignV);
-  Value *InitialSize = ConstantInt::get(Int32Type, IdToSize[DSID++]);
+  Value *InitialSize = ConstantInt::get(Int32Type, IdToSize[DSNodeToDSIDMap[Node]]);
 
   for (unsigned i = 0, e = PoolInitPoints.size(); i != e; ++i) {
     Value* Opts[4] = {PD, ElSize, Align, InitialSize};
@@ -1657,15 +1699,17 @@ void PoolAllocate::printPossibleDSIDUsedByFunction(const Function &F) {
 	std::set<const DSNode *> Result;
 	std::vector<std::pair<const Function *, unsigned> > CallerStack;
 	FuncInfo *FI = getFuncInfoOrClone(F);
-	errs() << "Function " << F.getName() << " may use the following DSNode:\n";
-	for (unsigned i = 0; i < FI->ArgNodes.size(); ++i)
+	errs() << "Function " << F.getName() << ":\n";
+	for (unsigned i = 0; i < FI->ArgNodes.size(); ++i) {
+		errs() << "\tArg " << i <<" may use DSIDs: ";
 		getPossibleDSIDForArgNode(F, i, Result, CallerStack); 
-	Result.insert(FI->NodesToPA.begin(), FI->NodesToPA.end());
+		for (std::set<const DSNode *>::iterator DSI = Result.begin(),
+				DSE = Result.end(); DSI != DSE; ++DSI)
+			errs() << DSNodeToDSIDMap[*DSI] << ' ';
+		errs() << "\n";
+		Result.clear();
+	}
 
-	for (std::set<const DSNode *>::iterator DSI = Result.begin(),
-			DSE = Result.end(); DSI != DSE; ++DSI)
-		(*DSI)->dump();
-	errs() << "\n";
 }
 
 void PoolAllocate::getPossibleDSIDForArgNode(const Function &F, unsigned ArgIdx, std::set<const DSNode *>& Result, std::vector<std::pair<const Function *, unsigned> > &CallerStack ) {
@@ -1683,7 +1727,7 @@ void PoolAllocate::getPossibleDSIDForArgNode(const Function &F, unsigned ArgIdx,
 				// get corresponding DSNodes for the PD arg
 				FI->ReversePoolDescriptors.equal_range(CI->getArgOperand(ArgIdx));
 			if (R.first == R.second) {
-				errs() << F.getName() <<  ": !!!!ReversePoolDescriptors returns null\n";
+				errs() << F.getName() <<  ": Warning: ReversePoolDescriptors returns null\n";
 				errs() << *CI <<' '<< ArgIdx << '\n';
 			}
 			// if the DSNodes is pool allocated in the caller, 
