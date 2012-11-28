@@ -457,6 +457,11 @@ bool PoolAllocate::runOnModule(Module &M) {
     MicroOptimizePoolCalls();
   #endif
  
+  for (std::map<const Function *, Function *>::iterator CFI = 
+		  CloneToOrigMap.begin(), CFE = CloneToOrigMap.end();
+		  CFI != CFE; ++CFI)
+	  printPossibleDSIDUsedByFunction(*CFI->first);
+
   return true;
 }
 
@@ -1646,4 +1651,78 @@ unsigned PoolAllocate::getNumInitialPoolArguments(StringRef FuncName) {
   }
   
   return 0;
+}
+
+void PoolAllocate::printPossibleDSIDUsedByFunction(const Function &F) {
+	std::set<const DSNode *> Result;
+	std::vector<std::pair<const Function *, unsigned> > CallerStack;
+	FuncInfo *FI = getFuncInfoOrClone(F);
+	errs() << "Function " << F.getName() << " may use the following DSNode:\n";
+	for (unsigned i = 0; i < FI->ArgNodes.size(); ++i)
+		getPossibleDSIDForArgNode(F, i, Result, CallerStack); 
+	Result.insert(FI->NodesToPA.begin(), FI->NodesToPA.end());
+
+	for (std::set<const DSNode *>::iterator DSI = Result.begin(),
+			DSE = Result.end(); DSI != DSE; ++DSI)
+		(*DSI)->dump();
+	errs() << "\n";
+}
+
+void PoolAllocate::getPossibleDSIDForArgNode(const Function &F, unsigned ArgIdx, std::set<const DSNode *>& Result, std::vector<std::pair<const Function *, unsigned> > &CallerStack ) {
+	const Function *Caller;
+	FuncInfo *FI;
+	// for all callers
+	for (Value::const_use_iterator UI = F.use_begin(),
+			UE = F.use_end(); UI != UE; ++UI) {
+		const CallInst *CI;
+		if ((CI = dyn_cast<const CallInst>(*UI)) != NULL) {
+			Caller = CI->getParent()->getParent();
+			FI = getFuncInfoOrClone(*Caller);
+			FI->calculate_reverse_pool_descriptors();
+			std::pair<std::multimap<Value *, const DSNode *>::iterator, std::multimap<Value *, const DSNode *>::iterator > R = 
+				// get corresponding DSNodes for the PD arg
+				FI->ReversePoolDescriptors.equal_range(CI->getArgOperand(ArgIdx));
+			if (R.first == R.second) {
+				errs() << F.getName() <<  ": !!!!ReversePoolDescriptors returns null\n";
+				errs() << *CI <<' '<< ArgIdx << '\n';
+			}
+			// if the DSNodes is pool allocated in the caller, 
+			// add it into result
+			// else, it has to be an argument passed in, do
+			// the same thing recursively.
+			for (std::multimap<Value *, const DSNode *>::iterator MMI = R.first; MMI != R.second; ++MMI) {
+				bool Found = false;
+				for (unsigned i = 0; i < FI->NodesToPA.size(); i++)
+					if (FI->NodesToPA[i] == MMI->second) {
+						Result.insert(MMI->second);
+						Found = true;
+						break;
+					}
+
+				if (Found)
+					continue;
+
+				for (unsigned i = 0; i < FI->ArgNodes.size(); i++)
+					if (FI->ArgNodes[i] == MMI->second) {
+						bool RecursiveFound = false;
+						for (unsigned j = 0; j < CallerStack.size(); ++j)
+							if (Caller == CallerStack[j].first && i == CallerStack[j].second) {
+								RecursiveFound = true;
+								Found = true;
+								break;
+							}
+
+						if (RecursiveFound)
+							continue;
+
+						CallerStack.push_back(std::make_pair(Caller, i));
+						getPossibleDSIDForArgNode(*Caller, i, Result, CallerStack);
+						CallerStack.pop_back();
+						Found = true;
+						break;
+					}
+				assert(Found);
+			}
+		}
+	}
 }

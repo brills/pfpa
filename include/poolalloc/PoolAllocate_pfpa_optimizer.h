@@ -513,6 +513,10 @@ protected:
                             std::multimap<AllocaInst*, CallInst*> &PoolFrees);
 
   void CalculateLivePoolFreeBlocks(std::set<BasicBlock*> &LiveBlocks,Value *PD);
+
+  void printPossibleDSIDUsedByFunction(const Function &F);
+  void getPossibleDSIDForArgNode(const Function &F, unsigned ArgIdx, std::set<const DSNode *>& Result, std::vector<std::pair<const Function *, unsigned> > &CallerStack); 
+
 };
 
 
