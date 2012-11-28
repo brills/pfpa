@@ -521,7 +521,9 @@ protected:
   void CalculateLivePoolFreeBlocks(std::set<BasicBlock*> &LiveBlocks,Value *PD);
 
   void printPossibleDSIDUsedByFunction(const Function &F);
-  void getPossibleDSIDForArgNode(const Function &F, unsigned ArgIdx, std::set<const DSNode *>& Result, std::vector<std::pair<const Function *, unsigned> > &CallerStack); 
+  void getPossibleDSIDForArgNode_rec(const Function &F, unsigned ArgIdx, std::set<const DSNode *>& Result, std::vector<std::pair<const Function *, unsigned> > &CallerStack); 
+  void getPossibleDSIDForArgNode(const Function &F, const DSNode *ArgNode, std::vector<int> &Result);
+  void buildDSIDToTypeMap(void);
 
 };
 

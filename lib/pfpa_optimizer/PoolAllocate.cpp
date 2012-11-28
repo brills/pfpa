@@ -42,6 +42,7 @@
 #include "llvm/Support/Timer.h"
 #include "poolalloc/PoolAllocate_pfpa_optimizer.h"
 
+
 using namespace llvm;
 using namespace PA;
 
@@ -456,11 +457,19 @@ bool PoolAllocate::runOnModule(Module &M) {
   if (CurHeuristic->IsRealHeuristic())
     MicroOptimizePoolCalls();
   #endif
- 
-  for (std::map<const Function *, Function *>::iterator CFI = 
-		  CloneToOrigMap.begin(), CFE = CloneToOrigMap.end();
-		  CFI != CFE; ++CFI)
-	  printPossibleDSIDUsedByFunction(*CFI->first);
+  buildDSIDToTypeMap();
+  for (std::map<int, const Type *>::iterator 
+		  MI = DSIDToTypeMap.begin(), ME = DSIDToTypeMap.end();
+		  MI != ME; ++MI) {
+	  errs() << "DSID " << MI->first << " is type: " << (MI->second) << ' ';
+	  MI->second->dump();
+	  errs() << '\n';
+  }
+
+//  for (std::map<const Function *, Function *>::iterator CFI = 
+//		  CloneToOrigMap.begin(), CFE = CloneToOrigMap.end();
+//		  CFI != CFE; ++CFI)
+//	  printPossibleDSIDUsedByFunction(*CFI->first);
 
   return true;
 }
@@ -1702,7 +1711,7 @@ void PoolAllocate::printPossibleDSIDUsedByFunction(const Function &F) {
 	errs() << "Function " << F.getName() << ":\n";
 	for (unsigned i = 0; i < FI->ArgNodes.size(); ++i) {
 		errs() << "\tArg " << i <<" may use DSIDs: ";
-		getPossibleDSIDForArgNode(F, i, Result, CallerStack); 
+		getPossibleDSIDForArgNode_rec(F, i, Result, CallerStack); 
 		for (std::set<const DSNode *>::iterator DSI = Result.begin(),
 				DSE = Result.end(); DSI != DSE; ++DSI)
 			errs() << DSNodeToDSIDMap[*DSI] << ' ';
@@ -1712,9 +1721,28 @@ void PoolAllocate::printPossibleDSIDUsedByFunction(const Function &F) {
 
 }
 
-void PoolAllocate::getPossibleDSIDForArgNode(const Function &F, unsigned ArgIdx, std::set<const DSNode *>& Result, std::vector<std::pair<const Function *, unsigned> > &CallerStack ) {
+//wrapper
+void PoolAllocate::getPossibleDSIDForArgNode(const Function &F, const DSNode *ArgNode, std::vector<int> &Result) {
+	std::set<const DSNode *> R;
+	std::vector<std::pair<const Function *, unsigned> > CallerStack;
+	
+	FuncInfo *FI = getFuncInfoOrClone(F);
+	std::vector<const DSNode *>::iterator DI = std::find(FI->ArgNodes.begin(), FI->ArgNodes.end(), ArgNode);
+	assert (DI != FI->ArgNodes.end());
+	// in case the assertion is disabled...
+	if (DI == FI->ArgNodes.end()) return;
+	getPossibleDSIDForArgNode_rec(F, DI - FI->ArgNodes.begin(), R, CallerStack); 
+	for (std::set<const DSNode *>::iterator DSI = R.begin(), DSE = R.end(); DSI != DSE; ++DSI)
+		Result.push_back(DSNodeToDSIDMap[*DSI]);
+
+}
+
+void PoolAllocate::getPossibleDSIDForArgNode_rec(const Function &F, unsigned ArgIdx, std::set<const DSNode *>& Result, std::vector<std::pair<const Function *, unsigned> > &CallerStack ) {
 	const Function *Caller;
 	FuncInfo *FI;
+	
+	if (&F != getFuncInfoOrClone(F)->Clone)
+		errs() << "!!! Need Cloned Function!\n";
 	// for all callers
 	for (Value::const_use_iterator UI = F.use_begin(),
 			UE = F.use_end(); UI != UE; ++UI) {
@@ -1760,7 +1788,7 @@ void PoolAllocate::getPossibleDSIDForArgNode(const Function &F, unsigned ArgIdx,
 							continue;
 
 						CallerStack.push_back(std::make_pair(Caller, i));
-						getPossibleDSIDForArgNode(*Caller, i, Result, CallerStack);
+						getPossibleDSIDForArgNode_rec(*Caller, i, Result, CallerStack);
 						CallerStack.pop_back();
 						Found = true;
 						break;
@@ -1769,4 +1797,80 @@ void PoolAllocate::getPossibleDSIDForArgNode(const Function &F, unsigned ArgIdx,
 			}
 		}
 	}
+}
+
+//This function checks the type of all pool pointing GEP inst,
+//ensure consistent type in one pool and make a map from DSID
+//to the type.
+//
+void PoolAllocate::buildDSIDToTypeMap(void) {
+
+	for (Module::iterator I = CurModule->begin(),
+			E = CurModule->end(); I != E; ++I) {
+		// TODO: What about the main function??
+		// Make sure the we are iterating original funcitons
+		if (!I->isDeclaration() && CloneToOrigMap.find(&(*I)) == CloneToOrigMap.end() &&
+			Graphs->hasDSGraph(*I)) {
+			Function &F = *I;
+			DSGraph *G = Graphs->getDSGraph(F);
+			FuncInfo *FI = getFuncInfoOrClone(F);
+			for (Function::iterator BB = F.begin(), BE = F.end();
+					BB != BE; ++BB)
+				for (BasicBlock::iterator II = BB->begin(), IE = BB->end();
+						II != IE; ++II) {
+					LoadInst *LD;
+					StoreInst *ST;
+					DSNodeHandle PointedNode;
+					Value *PointerOperand;
+					LD = dyn_cast<LoadInst>(&*II);
+					ST = dyn_cast<StoreInst>(&*II);
+					if (LD||ST) {
+						PointerOperand = LD ? LD->getPointerOperand() : ST->getPointerOperand();
+						PointedNode = G->getNodeForValue(PointerOperand);
+						DSNode *Node = PointedNode.getNode();
+						Value *PD = FI->PoolDescriptors[Node];
+						
+						if (!PointedNode.isNull() && PD && !isa<ConstantPointerNull>(PD)) {
+							//XXX: Assume Node is either in NodeToPA or in ArgNodes
+							std::vector<int> AssociatedDSID;
+							std::vector<const DSNode *>::iterator DI = std::find(FI->ArgNodes.begin(),
+									FI->ArgNodes.end(), Node);
+							if (DI != FI->ArgNodes.end())
+								getPossibleDSIDForArgNode(*FI->Clone, Node, AssociatedDSID);
+							else { 
+								DI = std::find(FI->NodesToPA.begin(), FI->NodesToPA.end(), Node);
+									
+								assert(DI != FI->NodesToPA.end());
+								assert(DSNodeToDSIDMap.find(*DI) != DSNodeToDSIDMap.end());
+								AssociatedDSID.push_back(DSNodeToDSIDMap[*DI]);
+							}
+							//XXX: Assuming no nested GEP;
+							//This may fail when accessing 
+							//somthing like
+							//A->b[i];
+							//This is not handled by current
+							//implementation.
+							GetElementPtrInst *GEP;
+							const Type *PoolType, *OldPoolType;
+							GEP = dyn_cast<GetElementPtrInst>(PointerOperand);
+							if (!GEP) {
+								errs() << "Warining: Non-GEP inst points to DSNode! " << *PointerOperand << '\n';
+								continue;
+							}
+
+							//assert (GEP);
+							PoolType = GEP->getPointerOperandType()->getElementType();
+							for (unsigned i = 0; i < AssociatedDSID.size(); ++i) {
+								OldPoolType = DSIDToTypeMap[AssociatedDSID[i]];
+								if (OldPoolType)
+									assert(OldPoolType == PoolType);
+								else
+									DSIDToTypeMap[AssociatedDSID[i]] = PoolType;
+							}
+						}
+					} 
+				}
+		}
+	}
+
 }
