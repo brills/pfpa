@@ -219,7 +219,9 @@ class PoolAllocate : public PoolAllocateGroup {
   std::map<int, const DSNode *> DSIDToDSNodeMap;
   std::map<const DSNode *, int> DSNodeToDSIDMap;
   std::map<int, const Type *> DSIDToTypeMap;
-  std::set<PFPAEquivClass *> PFPAEquivClassSet;
+  typedef std::set<PFPAEquivClass *> PFPAEquivClassSetTy;
+  PFPAEquivClassSetTy PFPAEquivClassSet;
+  std::map<int, PFPAEquivClass *> DSIDToPFPAEquivClassMap;
 public:
 
   Constant *PoolInit, *PoolDestroy, *PoolAlloc, *PoolRealloc, *PoolMemAlign, *PoolThreadWrapper;
@@ -528,6 +530,8 @@ protected:
   void getPossibleDSIDForArgNode(const Function &F, const DSNode *ArgNode, std::vector<int> &Result);
   void buildDSIDToTypeMap(void);
   void buildPFPAEquivClass(void);
+  void populateRelatedGEP(void);
+  void readMemProfileData(void);
 
 };
 

@@ -460,13 +460,8 @@ bool PoolAllocate::runOnModule(Module &M) {
   #endif
   buildDSIDToTypeMap();
   buildPFPAEquivClass();
-  for (std::map<int, const Type *>::iterator 
-		  MI = DSIDToTypeMap.begin(), ME = DSIDToTypeMap.end();
-		  MI != ME; ++MI) {
-	  errs() << "DSID " << MI->first << " is type: " << (MI->second) << ' ';
-	  MI->second->dump();
-	  errs() << '\n';
-  }
+  populateRelatedGEP();
+  readMemProfileData();
   unsigned i = 1;
   for (std::set<PFPAEquivClass *>::iterator
 		  SI = PFPAEquivClassSet.begin(), 
@@ -477,9 +472,24 @@ bool PoolAllocate::runOnModule(Module &M) {
 	  for (std::set<int>::iterator II = EC->DSIDInClass.begin(),
 			  IE = EC->DSIDInClass.end(); IE != II; ++II)
 		  errs() << *II << ' ';
-	  errs() << "\tType: ";
+	  errs() << "\n\tType: ";
 	  EC->DSType->dump();
-	  errs() << '\n';
+	//  errs() << "\tContains Related GEPs:";
+	//  for (unsigned j = 0; j < EC->RelatedGEP.size(); ++j)
+	//	  errs() << "\t\t" << *EC->RelatedGEP[j] << '\n';
+	  errs() << "\n\tProfile Data:\n";
+	  for (PFPAEquivClass::DSIDToProfileDataMapTy::iterator
+			  II = EC->DSIDToProfileDataMap.begin(),
+			  IE = EC->DSIDToProfileDataMap.end();
+			  II != IE; ++II) {
+		  errs() << "\t\tDSID: " << II->first << '\n';
+		  for (PFPAEquivClass::FreqMapTy::iterator 
+				  FI = II->second.begin(),
+				  FE = II->second.end(); FI != FE; ++FI)
+			  errs() << "\t\t\t(" << FI->first.first << ", " <<
+				  FI->first.second << "): " << FI->second << '\n';
+	  	
+	  }
   }
 	  
 //  for (std::map<const Function *, Function *>::iterator CFI = 
@@ -1947,10 +1957,94 @@ void PoolAllocate::buildPFPAEquivClass(void) {
 			}
 		}
 	}
+
 	for (std::vector<PFPAEquivClass *>::iterator 
-			I = DSDS.begin(), E = DSDS.end(); I != E; ++I)
+			I = DSDS.begin(), E = DSDS.end(); I != E; ++I) {
 		PFPAEquivClassSet.insert(*I);
+	}
+
+	for (PFPAEquivClassSetTy::iterator 
+			I = PFPAEquivClassSet.begin(),
+			E = PFPAEquivClassSet.end(); I != E; ++I)
+		for (std::set<int>::iterator 
+				SI = (*I)->DSIDInClass.begin(),
+				SE = (*I)->DSIDInClass.end();
+				SI != SE; ++SI) 
+			DSIDToPFPAEquivClassMap[*SI] = *I;
 
 }
 
+void PoolAllocate::populateRelatedGEP(void) {
+		for (Module::iterator I = CurModule->begin(),
+			E = CurModule->end(); I != E; ++I) {
+			Function &F = *I;
+			FuncInfo *FI = getFuncInfoOrClone(F);
+			bool IsMain = F.getName().str() == "main" && F.hasExternalLinkage();
+			// we only work on cloned and main function
+			if (IsMain || 
+					(!I->isDeclaration() 
+						&& CloneToOrigMap.find(&(*I)) != CloneToOrigMap.end() 
+						&& Graphs->hasDSGraph(FI->F))){
+				
+				DSGraph *G = Graphs->getDSGraph(FI->F);
+				for (Function::iterator BB = F.begin(), BE = F.end();
+						BB != BE; ++BB)
+					for (BasicBlock::iterator II = BB->begin(), IE = BB->end();
+							II != IE; ++II) {
+						GetElementPtrInst *GEP;
+						DSNodeHandle PointedNode;
+						if ((GEP = dyn_cast<GetElementPtrInst>(&(*II)))!= NULL) {
+							PointedNode = G->getNodeForValue(FI->NewToOldValueMap[cast<Value>(GEP)]);
+							DSNode *Node = PointedNode.getNode();
+							Value *PD = FI->PoolDescriptors[Node];
 
+							if (!PointedNode.isNull() && PD && !isa<ConstantPointerNull>(PD)) {
+								std::vector<int> AssociatedDSID;
+								std::vector<const DSNode *>::iterator 
+									DI = std::find(FI->ArgNodes.begin(), 
+											FI->ArgNodes.end(), Node);
+								if (DI != FI->ArgNodes.end())
+									getPossibleDSIDForArgNode(*FI->Clone, Node, AssociatedDSID);
+								else { 
+									DI = std::find(FI->NodesToPA.begin(), FI->NodesToPA.end(), Node);
+
+									assert(DI != FI->NodesToPA.end());
+									assert(DSNodeToDSIDMap.find(*DI) != DSNodeToDSIDMap.end());
+									AssociatedDSID.push_back(DSNodeToDSIDMap[*DI]);
+								}
+
+								assert(AssociatedDSID.size() != 0);
+								DSIDToPFPAEquivClassMap[AssociatedDSID[0]]->RelatedGEP.push_back(GEP);
+							}
+						}
+					}
+			} // if (isMain...)
+		} // for (iterate in the module)
+}
+
+void PoolAllocate::readMemProfileData(void) {
+	std::ifstream PF("pfpa_memstat.out");
+	std::string Line;
+	// skip the header line
+	std::getline(PF, Line);
+	while (std::getline(PF, Line)) {
+		std::istringstream ISS(Line);
+		int ID;
+		unsigned Offset, Size, Time;
+		PFPAEquivClass *EC;
+		//skip the type
+		ISS.seekg(2, std::ios::beg);
+		if (!(ISS >> ID >> Offset >> Size >> Time) ) {
+			errs() << "Error loading profile file\n";
+			break;
+		}
+		errs() << ID << ',' << Offset << ',' <<
+			Size << ',' << Time << '\n';
+		EC = DSIDToPFPAEquivClassMap[ID];
+		errs() << "!!!! ID = " << ID << '\n';
+		assert (EC && "No EquivClass found, inconsistent pfdata?");
+		EC->DSIDToProfileDataMap[ID][std::make_pair(Offset, Size)] += Time;
+
+	}
+
+}
