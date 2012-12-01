@@ -41,6 +41,7 @@
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/Timer.h"
 #include "poolalloc/PoolAllocate_pfpa_optimizer.h"
+#include "poolalloc/PFPAEquivClass.h"
 
 
 using namespace llvm;
@@ -458,6 +459,7 @@ bool PoolAllocate::runOnModule(Module &M) {
     MicroOptimizePoolCalls();
   #endif
   buildDSIDToTypeMap();
+  buildPFPAEquivClass();
   for (std::map<int, const Type *>::iterator 
 		  MI = DSIDToTypeMap.begin(), ME = DSIDToTypeMap.end();
 		  MI != ME; ++MI) {
@@ -465,7 +467,21 @@ bool PoolAllocate::runOnModule(Module &M) {
 	  MI->second->dump();
 	  errs() << '\n';
   }
-
+  unsigned i = 1;
+  for (std::set<PFPAEquivClass *>::iterator
+		  SI = PFPAEquivClassSet.begin(), 
+		  SE = PFPAEquivClassSet.end(); SI != SE; 
+		  ++SI, ++i) {
+	  PFPAEquivClass *EC = *SI;
+	  errs() << "EquivClass #" << i << " :\n\tContains DSID: ";
+	  for (std::set<int>::iterator II = EC->DSIDInClass.begin(),
+			  IE = EC->DSIDInClass.end(); IE != II; ++II)
+		  errs() << *II << ' ';
+	  errs() << "\tType: ";
+	  EC->DSType->dump();
+	  errs() << '\n';
+  }
+	  
 //  for (std::map<const Function *, Function *>::iterator CFI = 
 //		  CloneToOrigMap.begin(), CFE = CloneToOrigMap.end();
 //		  CFI != CFE; ++CFI)
@@ -1854,7 +1870,7 @@ void PoolAllocate::buildDSIDToTypeMap(void) {
 							const Type *PoolType, *OldPoolType;
 							GEP = dyn_cast<GetElementPtrInst>(PointerOperand);
 							if (!GEP) {
-								errs() << "Warining: Non-GEP inst points to DSNode! " << *PointerOperand << '\n';
+								//errs() << "Warning: Non-GEP inst points to DSNode! " << *PointerOperand << '\n';
 								continue;
 							}
 
@@ -1862,9 +1878,18 @@ void PoolAllocate::buildDSIDToTypeMap(void) {
 							PoolType = GEP->getPointerOperandType()->getElementType();
 							for (unsigned i = 0; i < AssociatedDSID.size(); ++i) {
 								OldPoolType = DSIDToTypeMap[AssociatedDSID[i]];
-								if (OldPoolType)
-									assert(OldPoolType == PoolType);
-								else
+								if (OldPoolType) {
+									if (OldPoolType != PoolType) {
+										PoolType->dump();
+										errs() << '\n';
+										II->dump();
+										errs() << '\n';
+										BB->dump();
+										errs() << '\n';
+										assert(0);
+										
+									}
+								} else
 									DSIDToTypeMap[AssociatedDSID[i]] = PoolType;
 							}
 						}
@@ -1874,3 +1899,58 @@ void PoolAllocate::buildDSIDToTypeMap(void) {
 	}
 
 }
+
+void PoolAllocate::buildPFPAEquivClass(void) {
+	//Disjoint set data structure
+	std::vector<PFPAEquivClass *> DSDS;
+	for (int i = 0; i < DSID; i++) {
+		PFPAEquivClass *PtrEC;
+		// ensure all DSIDs have an associated type;
+		assert(DSIDToTypeMap.find(i) != DSIDToTypeMap.end());
+		// ensure all DSIDs have an associated DSNode;
+		assert(DSIDToDSNodeMap.find(i) != DSIDToDSNodeMap.end());
+		
+		PtrEC = new PFPAEquivClass();
+		PtrEC->RefCount = 1;
+		PtrEC->DSIDInClass.insert(i);
+		PtrEC->DSType = DSIDToTypeMap[i];
+		DSDS.push_back(PtrEC);
+	}
+	
+	for (std::map<const Function *, Function *>::iterator
+			MI = CloneToOrigMap.begin(), ME = CloneToOrigMap.end();
+			MI != ME; ++MI) {
+		const Function &F = *MI->first;
+		FuncInfo *FI = getFuncInfoOrClone(F);
+		errs() << F.getName() << FI << '\n';
+		for (unsigned i = 0; i < FI->ArgNodes.size(); ++i) {
+			std::vector<int> DSIDToMerge;
+			getPossibleDSIDForArgNode(F, FI->ArgNodes[i], DSIDToMerge);
+			if (DSIDToMerge.size() < 2)
+				continue;
+			// merge into result[0]
+			errs() << DSID << ' ' << DSIDToMerge[0] << '\n';
+			PFPAEquivClass *PtrECMergeTo = DSDS[DSIDToMerge[0]];
+			assert(PtrECMergeTo);
+			for (unsigned j = 1; j < DSIDToMerge.size(); ++j) {
+
+				PFPAEquivClass *PtrEC = DSDS[DSIDToMerge[j]];
+				// ensure that DSIDs being merged have the same
+				// type.
+				assert (PtrEC->DSType == PtrECMergeTo->DSType);
+
+				PtrECMergeTo->DSIDInClass.insert(PtrEC->DSIDInClass.begin(), PtrEC->DSIDInClass.end());
+				DSDS[DSIDToMerge[j]] = PtrECMergeTo;
+				++PtrECMergeTo->RefCount;
+//				if (--PtrEC->RefCount == 0)
+	//				delete PtrEC;
+			}
+		}
+	}
+	for (std::vector<PFPAEquivClass *>::iterator 
+			I = DSDS.begin(), E = DSDS.end(); I != E; ++I)
+		PFPAEquivClassSet.insert(*I);
+
+}
+
+

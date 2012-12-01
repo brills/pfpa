@@ -2,8 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-struct list { struct list *next; int data;};
-struct list1 { struct list1 *next; int data;};
+struct list1 { struct list1 *next; int data; int array[10][2];};
+struct list { struct list *next; int data; struct list1 l[128];};
 
 void printlist( struct list1 *L) {
 	while (L) {
@@ -15,7 +15,10 @@ void printlist( struct list1 *L) {
 
 struct list *createnode(int data) {
 	struct list *new = malloc(sizeof(struct list));
+	int i;
 	new->data = data;
+	for (i = 0; i < 128; i++)
+		new->l[i].array[i>>5][1] = 0;
 	return new;
 }
 

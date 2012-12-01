@@ -36,6 +36,8 @@
 #include "poolalloc/Config/config.h"
 #include "poolalloc/Heuristic.h"
 
+#include "poolalloc/PFPAEquivClass.h"
+
 #include <utility>
 
 namespace llvm {
@@ -217,6 +219,7 @@ class PoolAllocate : public PoolAllocateGroup {
   std::map<int, const DSNode *> DSIDToDSNodeMap;
   std::map<const DSNode *, int> DSNodeToDSIDMap;
   std::map<int, const Type *> DSIDToTypeMap;
+  std::set<PFPAEquivClass *> PFPAEquivClassSet;
 public:
 
   Constant *PoolInit, *PoolDestroy, *PoolAlloc, *PoolRealloc, *PoolMemAlign, *PoolThreadWrapper;
@@ -524,6 +527,7 @@ protected:
   void getPossibleDSIDForArgNode_rec(const Function &F, unsigned ArgIdx, std::set<const DSNode *>& Result, std::vector<std::pair<const Function *, unsigned> > &CallerStack); 
   void getPossibleDSIDForArgNode(const Function &F, const DSNode *ArgNode, std::vector<int> &Result);
   void buildDSIDToTypeMap(void);
+  void buildPFPAEquivClass(void);
 
 };
 
