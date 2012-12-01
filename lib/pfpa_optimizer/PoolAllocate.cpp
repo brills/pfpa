@@ -2041,7 +2041,6 @@ void PoolAllocate::readMemProfileData(void) {
 		errs() << ID << ',' << Offset << ',' <<
 			Size << ',' << Time << '\n';
 		EC = DSIDToPFPAEquivClassMap[ID];
-		errs() << "!!!! ID = " << ID << '\n';
 		assert (EC && "No EquivClass found, inconsistent pfdata?");
 		EC->DSIDToProfileDataMap[ID][std::make_pair(Offset, Size)] += Time;
 
