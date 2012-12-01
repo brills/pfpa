@@ -246,6 +246,9 @@ protected:
 
  public:
   static char ID;
+  std::set<PFPAEquivClass *> &getPFPAEquivClassSet(void) {
+	  return PFPAEquivClassSet;
+  }
 
   PoolAllocate (bool passAllArguments,
                 bool SAFECode = true,
