@@ -1993,8 +1993,14 @@ void PoolAllocate::populateRelatedGEP(void) {
 							II != IE; ++II) {
 						GetElementPtrInst *GEP;
 						DSNodeHandle PointedNode;
+						const Value *V;
 						if ((GEP = dyn_cast<GetElementPtrInst>(&(*II)))!= NULL) {
-							PointedNode = G->getNodeForValue(FI->NewToOldValueMap[cast<Value>(GEP)]);
+							if (IsMain)
+								V = cast<Value>(GEP);
+							else 
+								V = FI->NewToOldValueMap[cast<Value>(GEP)];
+								
+							PointedNode = G->getNodeForValue(V);
 							DSNode *Node = PointedNode.getNode();
 							Value *PD = FI->PoolDescriptors[Node];
 
