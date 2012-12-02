@@ -203,6 +203,7 @@ extern "C" {
   void poolmakeunfreeable(PoolTy<NormalPoolTraits> *Pool);
   void pooldestroy(PoolTy<NormalPoolTraits> *Pool);
   void *poolalloc(PoolTy<NormalPoolTraits> *Pool, unsigned NumBytes);
+  void *poolalloc_opt(PoolTy<NormalPoolTraits> *Pool, unsigned NumBytes);
   void *poolcalloc(PoolTy<NormalPoolTraits> *Pool, unsigned NumBytes, unsigned);
   void *poolrealloc(PoolTy<NormalPoolTraits> *Pool,
                     void *Node, unsigned NumBytes);

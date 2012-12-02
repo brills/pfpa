@@ -901,10 +901,10 @@ void *poolalloc(PoolTy<NormalPoolTraits> *Pool, unsigned NumBytes) {
 void *poolalloc_opt(PoolTy<NormalPoolTraits> *Pool, unsigned NumBytes) {
   DO_IF_FORCE_MALLOCFREE(return malloc(NumBytes));
   if (Pool) pthread_mutex_lock(&Pool->pool_lock);
-  int* to_return = (int*)poolalloc_internal(Pool, Pool->HotTypeSize);
-  int* cold_pool = (int*)malloc(Pool->ColdTypeSize);
+  long* to_return = (long*)poolalloc_internal(Pool, Pool->HotTypeSize);
+  long* cold_pool = (long*)malloc(Pool->ColdTypeSize);
 
-  to_return[0] = *cold_pool;
+  *to_return = (long)cold_pool;
 
   if (Pool) pthread_mutex_unlock(&Pool->pool_lock);
   return to_return;

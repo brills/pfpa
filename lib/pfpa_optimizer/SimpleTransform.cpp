@@ -13,6 +13,7 @@
 #include "llvm/Instructions.h"
 #include "llvm/Target/TargetData.h"
 #include "llvm/Transforms/Utils/ValueMapper.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "poolalloc/PoolAllocate_pfpa_optimizer.h"
 #include "poolalloc/PFPAEquivClass.h"
 
@@ -27,8 +28,10 @@ namespace {
     PoolAllocate* PA;
     set<PFPAEquivClass*>* EC;
 
+    Type* Int8Type;
     Type* Int32Type;
     Type* VoidType;
+    Type* VoidPtrType;
 
     map<PFPAEquivClass*, map<unsigned,bool> > hotFields;
 
@@ -44,22 +47,53 @@ namespace {
 
     virtual bool runOnModule(Module& M){
       LLVMContext & Context = M.getContext();
+      Int8Type = IntegerType::getInt8Ty(Context);
       Int32Type = IntegerType::getInt32Ty(Context);
-      VoidType = IntegerType::getInt8Ty(Context);
-
+      VoidType = IntegerType::getVoidTy(Context);
+      VoidPtrType = PointerType::getUnqual(Int8Type);
       errs() << "Processing...!\n";
 
       TD = &getAnalysis<TargetData>();
       PA = &getAnalysis<PoolAllocate>();
       EC = &PA->getPFPAEquivClassSet();
 
+      Type* PoolDescType = PA->getPoolType(&Context); 
+      Type* PoolDescPtrTy = PointerType::getUnqual(PoolDescType);
+
+      Constant* poolInitOpt = M.getOrInsertFunction("poolinit_opt", VoidType,
+                                  PoolDescPtrTy, Int32Type, Int32Type,
+                                  Int32Type, Int32Type, Int32Type, NULL);
+
+      Constant* poolAllocOpt = M.getOrInsertFunction("poolalloc_opt", VoidPtrType,
+                                  PoolDescPtrTy, Int32Type, NULL);
+
       for(set<PFPAEquivClass*>::iterator i = EC->begin(), e = EC->end(); i!=e; ++i){
         PFPAEquivClass* ec = *i;
+        StructType* type = const_cast<StructType*>((const StructType*)ec->DSType);
 
         bool isTransformed = processEC(ec);
 
         if(!isTransformed)
           continue;        
+
+        for(unsigned i=0;i<ec->PoolInitCalls.size(); i++){
+          CallInst* ci = ec->PoolInitCalls[i];
+
+          unsigned hotSize = TD->getStructLayout(mapToHotType[ec])->getSizeInBytes();
+          unsigned coldSize = TD->getStructLayout(type)->getSizeInBytes();
+
+          Value* hotSizeValue = ConstantInt::get(Int32Type, hotSize);
+          Value* coldSizeValue = ConstantInt::get(Int32Type, coldSize);
+          Value* Opts[6] = {ci->getArgOperand(0), ci->getArgOperand(1), ci->getArgOperand(2),
+                                  ci->getArgOperand(3), coldSizeValue, hotSizeValue}; 
+          CallInst* newInst = CallInst::Create(poolInitOpt, Opts);
+          ReplaceInstWithInst(ci, newInst); 
+        }
+
+        for(unsigned i=0;i<ec->PoolAllocCalls.size(); i++){
+          CallInst* ca = ec->PoolAllocCalls[i];
+          ca->setCalledFunction(poolAllocOpt);
+        }
 
         vector<GetElementPtrInst *> geps = ec->RelatedGEP;
 
@@ -68,18 +102,22 @@ namespace {
           unsigned offset = getOffset(geps[i]);
           unsigned newOffset;
           StructType* newType;
-          if(!hotFields[ec][offset])
-            continue;
-
-          newOffset = mapToHotOffset[ec][offset];
-          newType = mapToHotType[ec];
+          if(!hotFields[ec][offset]){
+            CastInst* ci = CastInst::CreatePointerCast(geps[i]->getPointerOperand(), PointerType::getUnqual(geps[i]->getPointerOperandType()));
+            ci->insertBefore(geps[i]);
+            LoadInst* li = new LoadInst(ci, "coldAccess", geps[i]);
+            //errs() << *li->getType() << "\n";
+            geps[i]->setOperand(0,li);
+          } else {
+            newOffset = mapToHotOffset[ec][offset];
+            newType = mapToHotType[ec];
           
-          Value* v = geps[i]->getOperand(0);
-          CastInst* ci = CastInst::CreatePointerCast(v, PointerType::getUnqual(newType));
-          ci->insertBefore(geps[i]);
-          geps[i]->setOperand(0, ci);
-          geps[i]->setOperand(2, ConstantInt::get(Int32Type, newOffset));
-          
+            Value* v = geps[i]->getOperand(0);
+            CastInst* ci = CastInst::CreatePointerCast(v, PointerType::getUnqual(newType));
+            ci->insertBefore(geps[i]);
+            geps[i]->setOperand(0, ci);
+            geps[i]->setOperand(2, ConstantInt::get(Int32Type, newOffset));
+          }
           errs() << *geps[i] << "\n";
         }
       }
@@ -170,7 +208,7 @@ namespace {
 
       vector<Type*> hot;
 
-      hot.push_back(PointerType::getUnqual(VoidType));
+      hot.push_back(VoidPtrType);
 
       vector<pair<unsigned,unsigned> > offsetToIdx;
 
