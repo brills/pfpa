@@ -156,6 +156,13 @@ struct PoolTy {
   typename PoolTraits::FreeNodeHeaderPtrTy ObjFreeList;
   typename PoolTraits::FreeNodeHeaderPtrTy OtherFreeList;
 
+  // Hacked
+  // Size of the optimized type
+  unsigned HotTypeSize;
+  
+  // Size of the original type
+  unsigned ColdTypeSize;
+
   // Alignment - The required alignment of allocations the pool in bytes.
   unsigned Alignment;
 
@@ -188,6 +195,9 @@ struct PoolTy {
 };
 
 extern "C" {
+  void poolinit_opt(PoolTy<NormalPoolTraits> *Pool,
+                unsigned DeclaredSize, unsigned ObjAlignment, unsigned InitialSize, 
+                unsigned ColdTypeSize, unsigned HotTypeSize);
   void poolinit(PoolTy<NormalPoolTraits> *Pool,
                 unsigned DeclaredSize, unsigned ObjAlignment, unsigned InitialSize);
   void poolmakeunfreeable(PoolTy<NormalPoolTraits> *Pool);

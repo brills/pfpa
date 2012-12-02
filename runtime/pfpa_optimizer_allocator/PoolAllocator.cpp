@@ -475,14 +475,19 @@ void pooldestroy_bp(PoolTy<NormalPoolTraits> *Pool) {
 
 // poolinit - Initialize a pool descriptor to empty
 //
+
 template<typename PoolTraits>
 static void poolinit_internal(PoolTy<PoolTraits> *Pool,
-                              unsigned DeclaredSize, unsigned ObjAlignment, unsigned InitialSize) {
+                              unsigned DeclaredSize, unsigned ObjAlignment, unsigned InitialSize,
+                              unsigned ColdTypeSize = 0, unsigned HotTypeSize = 0) {
   assert(Pool && "Null pool pointer passed into poolinit!\n");
   memset(Pool, 0, sizeof(PoolTy<PoolTraits>));
   Pool->InitialSize = InitialSize;
   Pool->thread_refcount = 1;
   pthread_mutex_init(&Pool->pool_lock,NULL);
+
+  Pool->HotTypeSize = HotTypeSize;
+  Pool->ColdTypeSize = ColdTypeSize;
 
   if (ObjAlignment < 4) ObjAlignment = __alignof(double);
   Pool->Alignment = ObjAlignment;
@@ -521,6 +526,12 @@ static void poolinit_internal(PoolTy<PoolTraits> *Pool,
 void poolinit(PoolTy<NormalPoolTraits> *Pool,
               unsigned DeclaredSize, unsigned ObjAlignment, unsigned InitialSize) {
   poolinit_internal(Pool, DeclaredSize, ObjAlignment, InitialSize);
+}
+
+void poolinit_opt(PoolTy<NormalPoolTraits> *Pool,
+              unsigned DeclaredSize, unsigned ObjAlignment, unsigned InitialSize,
+              unsigned ColdTypeSize, unsigned HotTypeSize) {
+  poolinit_internal(Pool, DeclaredSize, ObjAlignment, InitialSize, ColdTypeSize, HotTypeSize);
 }
 
 // pooldestroy - Release all memory allocated for a pool
@@ -883,6 +894,18 @@ void *poolalloc(PoolTy<NormalPoolTraits> *Pool, unsigned NumBytes) {
   DO_IF_FORCE_MALLOCFREE(return malloc(NumBytes));
   if (Pool) pthread_mutex_lock(&Pool->pool_lock);
   void* to_return = poolalloc_internal(Pool, NumBytes);
+  if (Pool) pthread_mutex_unlock(&Pool->pool_lock);
+  return to_return;
+}
+
+void *poolalloc_opt(PoolTy<NormalPoolTraits> *Pool, unsigned NumBytes) {
+  DO_IF_FORCE_MALLOCFREE(return malloc(NumBytes));
+  if (Pool) pthread_mutex_lock(&Pool->pool_lock);
+  int* to_return = (int*)poolalloc_internal(Pool, Pool->HotTypeSize);
+  int* cold_pool = (int*)malloc(Pool->ColdTypeSize);
+
+  to_return[0] = *cold_pool;
+
   if (Pool) pthread_mutex_unlock(&Pool->pool_lock);
   return to_return;
 }
