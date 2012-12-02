@@ -3,7 +3,7 @@
 #include <stdlib.h>
 
 struct list1 { struct list1 *next; int data; int array[10][2];};
-struct list { struct list *next; int data; struct list1 l[128];};
+struct list { int cold; struct list *next; int data; struct list1 l[128];};
 
 void printlist( struct list1 *L) {
 	while (L) {
@@ -72,7 +72,10 @@ int main() {
 	srand(0);
 	struct list *mylist;
 	generatelist(&mylist, 20);
+        mylist->cold = 10;
 	processlist(mylist);
+
+        printf("%d\n", mylist->cold);
 	return 0;
 
 }
