@@ -462,6 +462,7 @@ bool PoolAllocate::runOnModule(Module &M) {
   buildPFPAEquivClass();
   populateRelatedGEP();
   readMemProfileData();
+  collectPoolOperationCalls();
   unsigned i = 1;
   for (std::set<PFPAEquivClass *>::iterator
 		  SI = PFPAEquivClassSet.begin(), 
@@ -472,25 +473,35 @@ bool PoolAllocate::runOnModule(Module &M) {
 	  for (std::set<int>::iterator II = EC->DSIDInClass.begin(),
 			  IE = EC->DSIDInClass.end(); IE != II; ++II)
 		  errs() << *II << ' ';
+
 	  errs() << "\n\tType: ";
 	  EC->DSType->dump();
 	//  errs() << "\tContains Related GEPs:";
 	//  for (unsigned j = 0; j < EC->RelatedGEP.size(); ++j)
 	//	  errs() << "\t\t" << *EC->RelatedGEP[j] << '\n';
-	  errs() << "\n\tProfile Data:\n";
-	  for (PFPAEquivClass::DSIDToProfileDataMapTy::iterator
-			  II = EC->DSIDToProfileDataMap.begin(),
-			  IE = EC->DSIDToProfileDataMap.end();
-			  II != IE; ++II) {
-		  errs() << "\t\tDSID: " << II->first << '\n';
-		  for (PFPAEquivClass::FreqMapTy::iterator 
-				  FI = II->second.begin(),
-				  FE = II->second.end(); FI != FE; ++FI)
-			  errs() << "\t\t\t(" << FI->first.first << ", " <<
-				  FI->first.second << "): " << FI->second << '\n';
+	
+//	  errs() << "\n\tProfile Data:\n";
+//	  for (PFPAEquivClass::DSIDToProfileDataMapTy::iterator
+//			  II = EC->DSIDToProfileDataMap.begin(),
+//			  IE = EC->DSIDToProfileDataMap.end();
+//			  II != IE; ++II) {
+//		  errs() << "\t\tDSID: " << II->first << '\n';
+//		  for (PFPAEquivClass::FreqMapTy::iterator 
+//				  FI = II->second.begin(),
+//				  FE = II->second.end(); FI != FE; ++FI)
+//			  errs() << "\t\t\t(" << FI->first.first << ", " <<
+//				  FI->first.second << "): " << FI->second << '\n'
+//				 
+      errs() << "\tPoolInit Calls related:\n";
+	  for (unsigned i = 0; i < EC->PoolInitCalls.size(); ++i)
+		  errs() << "\t\t" << *EC->PoolInitCalls[i] << '\n';
+      errs() << "\tPoolAlloc Calls related:\n";
+	  for (unsigned i = 0; i < EC->PoolAllocCalls.size(); ++i)
+		  errs() << "\t\t" << *EC->PoolAllocCalls[i] << '\n';
+	
 	  	
-	  }
   }
+//  }
 	  
 //  for (std::map<const Function *, Function *>::iterator CFI = 
 //		  CloneToOrigMap.begin(), CFE = CloneToOrigMap.end();
@@ -2050,6 +2061,75 @@ void PoolAllocate::readMemProfileData(void) {
 		assert (EC && "No EquivClass found, inconsistent pfdata?");
 		EC->DSIDToProfileDataMap[ID][std::make_pair(Offset, Size)] += Time;
 
+	}
+
+}
+
+void PoolAllocate::collectPoolOperationCalls() {
+	// collect PoolInit calls
+	for (Value::use_iterator UI = PoolInit->use_begin(),
+			UE = PoolInit->use_end(); UI != UE; ++UI) {
+		CallInst *CI = dyn_cast<CallInst>(*UI);
+		if (CI && CI->getCalledFunction() == cast<Function>(PoolInit)) {
+			Value *PoolDesc = CI->getArgOperand(0);
+			FuncInfo *FI = getFuncInfoOrClone(*CI->getParent()->getParent());
+			int count = 0, ID;
+			const DSNode *Node = 0;
+			for (std::map<const DSNode *, Value *>::iterator
+					MI = FI->PoolDescriptors.begin(),
+					ME = FI->PoolDescriptors.end();
+					MI != ME; ++MI) {
+				if (MI->second == PoolDesc) {
+					Node = MI->first;
+					++count;
+				}
+			}
+			assert(count == 1);
+			assert(DSNodeToDSIDMap.find(Node) != DSNodeToDSIDMap.end());
+			ID = DSNodeToDSIDMap[Node];
+			DSIDToPFPAEquivClassMap[ID]->PoolInitCalls.push_back(CI);
+		}
+	}
+
+	// collect PoolAlloc calls
+	for (Value::use_iterator UI = PoolAlloc->use_begin(),
+			UE = PoolAlloc->use_end(); UI != UE; ++UI) {
+		CallInst *CI = dyn_cast<CallInst>(*UI);
+		if (CI && CI->getCalledFunction() == cast<Function>(PoolAlloc)) {
+			Value *PoolDesc = CI->getArgOperand(0);
+			FuncInfo *FI = getFuncInfoOrClone(*CI->getParent()->getParent());
+			//passed in
+			int ID;
+			if (isa<Argument>(PoolDesc)) {
+				for (unsigned i = 0; i < FI->ArgNodes.size(); ++i)
+					if (FI->PoolDescriptors[FI->ArgNodes[i]] == PoolDesc) {
+						std::vector<int> AssociatedDSID;
+						getPossibleDSIDForArgNode(*FI->Clone, FI->ArgNodes[i], AssociatedDSID);
+						ID = AssociatedDSID[0];
+						break;
+					}
+					
+			} else {
+				assert (isa<GlobalValue>(PoolDesc) || isa<AllocaInst>(PoolDesc));
+				int count = 0, ID;
+				const DSNode *Node = 0;
+				for (std::map<const DSNode *, Value *>::iterator
+						MI = FI->PoolDescriptors.begin(),
+						ME = FI->PoolDescriptors.end();
+						MI != ME; ++MI) {
+					if (MI->second == PoolDesc) {
+						Node = MI->first;
+						++count;
+					}
+				}
+				assert(count == 1);
+				assert(DSNodeToDSIDMap.find(Node) != DSNodeToDSIDMap.end());
+				ID = DSNodeToDSIDMap[Node];
+
+			}
+
+			DSIDToPFPAEquivClassMap[ID]->PoolAllocCalls.push_back(CI);
+		}
 	}
 
 }

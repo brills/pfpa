@@ -535,6 +535,7 @@ protected:
   void buildPFPAEquivClass(void);
   void populateRelatedGEP(void);
   void readMemProfileData(void);
+  void collectPoolOperationCalls(void);
 
 };
 

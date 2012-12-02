@@ -16,6 +16,8 @@ struct PFPAEquivClass{
 	std::set<int> DSIDInClass;
 	DSIDToProfileDataMapTy DSIDToProfileDataMap;
 	std::vector<GetElementPtrInst *> RelatedGEP;
+	std::vector<CallInst *> PoolInitCalls;
+	std::vector<CallInst *> PoolAllocCalls;
 	int RefCount;
 	
 };
