@@ -1368,14 +1368,11 @@ PoolAllocate::ProcessFunctionBody(Function &F, Function &NewF) {
 
           // Calculate offset from GEP
           unsigned offset = 0;
-          for (gep_type_iterator I = gep_type_begin(pi), E = gep_type_end(pi);
-                    I != E; ++I){
-            if (StructType *STy = dyn_cast<StructType>(*I)) {
-              const ConstantInt* CUI = cast<ConstantInt>(I.getOperand());
-              int FieldNo = CUI->getSExtValue();
-
-              offset += (unsigned)TD->getStructLayout(STy)->getElementOffset(FieldNo);
-            }
+          if(StructType *STy = dyn_cast<StructType>(((PointerType*)pi->getPointerOperandType())->getElementType())){
+            const ConstantInt* CUI = cast<ConstantInt>(pi->getOperand(2));
+            int FieldNo = CUI->getSExtValue();
+       
+            offset = (unsigned)TD->getStructLayout(STy)->getElementOffset(FieldNo);
           }
 
           // Get the size of the element being loaded or stored

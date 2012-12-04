@@ -118,7 +118,6 @@ namespace {
             geps[i]->setOperand(0, ci);
             geps[i]->setOperand(2, ConstantInt::get(Int32Type, newOffset));
           }
-          errs() << *geps[i] << "\n";
         }
       }
       return true;
@@ -131,6 +130,8 @@ namespace {
    */
     bool processEC(PFPAEquivClass* ec){
       StructType* type = const_cast<StructType*>((const StructType*)ec->DSType);
+      errs() << "***Analyzing " << *type << "\n";
+
       const StructLayout* layout = TD->getStructLayout(type);
 
       bool isTransformed = false;
@@ -147,6 +148,7 @@ namespace {
                         fr!=fre; ++fr){
           unsigned offset = (*fr).first.first;
           unsigned count = (*fr).second;
+          errs() << "OS:" << offset << "->" << count << "\n";
           total += count;
 
           offsetToCounts[offset] += count;
@@ -160,6 +162,8 @@ namespace {
       for(unsigned i=0; i<((const StructType*)type)->getNumElements(); i++){
         unsigned offset = layout->getElementOffset(i);
         double k = (double)offsetToCounts[offset]/(double)total;
+ 
+        errs() << "\t" << offset << ": " << offsetToCounts[offset] << "/" << total << "\n";
         if(k>.2){
           hotMap[offset] = true;
         } else {
@@ -167,8 +171,10 @@ namespace {
         }
       }
 
-      if(isTransformed)
+      if(isTransformed){
         createNewTypes(ec, hotMap);
+        errs() << "\t New Type Created: " << *mapToHotType[ec] << "\n";
+      }
 
       return isTransformed;
     }
@@ -176,18 +182,11 @@ namespace {
     unsigned getOffset(GetElementPtrInst* gep){
       //Calculate offset from GEP
       unsigned offset = 0;
+      if(StructType *STy = dyn_cast<StructType>(((PointerType*)gep->getPointerOperandType())->getElementType())){
+        const ConstantInt* CUI = cast<ConstantInt>(gep->getOperand(2));
+        int FieldNo = CUI->getSExtValue();
 
-      //if(isa<GetElementPtrInst>(gep->getPointerOperand()))
-      //  offset = getOffset((GetElementPtrInst*)gep->getPointerOperand());
-
-      for (gep_type_iterator GI = gep_type_begin(gep), GE = gep_type_end(gep);
-              GI != GE; ++GI){
-        if (StructType *STy = dyn_cast<StructType>(*GI)) {
-          const ConstantInt* CUI = cast<ConstantInt>(GI.getOperand());
-          int FieldNo = CUI->getSExtValue();
-         
-          offset += (unsigned)TD->getStructLayout(STy)->getElementOffset(FieldNo);
-        }
+        offset = (unsigned)TD->getStructLayout(STy)->getElementOffset(FieldNo);
       }
 
       return offset;
