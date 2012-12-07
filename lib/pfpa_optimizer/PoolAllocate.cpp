@@ -1901,12 +1901,15 @@ void PoolAllocate::buildDSIDToTypeMap(void) {
 								OldPoolType = DSIDToTypeMap[AssociatedDSID[i]];
 								if (OldPoolType) {
 									if (OldPoolType != PoolType) {
+										OldPoolType->dump();
+										errs() << '\n';
 										PoolType->dump();
 										errs() << '\n';
 										II->dump();
 										errs() << '\n';
 										BB->dump();
 										errs() << '\n';
+										G->dump();
 										assert(0);
 										
 									}
