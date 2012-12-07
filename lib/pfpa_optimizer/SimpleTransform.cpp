@@ -164,7 +164,7 @@ namespace {
         double k = (double)offsetToCounts[offset]/(double)total;
  
         errs() << "\t" << offset << ": " << offsetToCounts[offset] << "/" << total << "\n";
-        if(k>.2){
+        if(k>.01){
           hotMap[offset] = true;
         } else {
           isTransformed = true;

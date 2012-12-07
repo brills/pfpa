@@ -32,10 +32,10 @@ typedef unsigned long uintptr_t;
 #endif
 
 // Configuration macros.  Define up to one of these.
-#define PRINT_NUM_POOLS          // Print use dynamic # pools info
-#define PRINT_POOLDESTROY_STATS  // When pools are destroyed, print stats
-#define PRINT_POOL_TRACE         // Print a full trace
-#define ENABLE_POOL_IDS            // PID for access/pool traces
+//#define PRINT_NUM_POOLS          // Print use dynamic # pools info
+//define PRINT_POOLDESTROY_STATS  // When pools are destroyed, print stats
+//#define PRINT_POOL_TRACE         // Print a full trace
+//#define ENABLE_POOL_IDS            // PID for access/pool traces
 
 // ALWAYS_USE_MALLOC_FREE - Make poolalloc/free always call malloc/free.  Note
 // that if the poolfree optimization is in use that this will cause memory

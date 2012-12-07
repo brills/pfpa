@@ -105,7 +105,8 @@ typedef struct rb_node_s
 #define	RB_BLACK	1
 	struct rb_node_s * rb_right;
 	struct rb_node_s * rb_left;
-	char data[8];
+	char cold[512];
+	//int a,b,c,d,e,f,g,h,i,j,k;
 	int key;
 }
 rb_node_t;

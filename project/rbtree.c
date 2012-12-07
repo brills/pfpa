@@ -209,10 +209,12 @@ int main() {
 		rb_insert(&mytree, create_node(rand() % 32768));
 	}
 
-	print_tree(mytree);
+	for (i = 0; i < 1000; i++)
+		print_tree(mytree);
+
     gettimeofday(&t_end,NULL);
     t_diff = (t_end.tv_sec - t_start.tv_sec) + (double)(t_end.tv_usec - t_start.tv_usec)/1000000;
-	printf(" ---  time spent = %.6f  --- \n", t_diff);
+	fprintf(stderr, " ---  time spent = %.6f  --- \n", t_diff);
 	return 0;
 	
 }
