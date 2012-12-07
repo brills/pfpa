@@ -2109,7 +2109,10 @@ void PoolAllocate::collectPoolOperationCalls() {
 					if (FI->PoolDescriptors[FI->ArgNodes[i]] == PoolDesc) {
 						std::vector<int> AssociatedDSID;
 						getPossibleDSIDForArgNode(*FI->Clone, FI->ArgNodes[i], AssociatedDSID);
-						ID = AssociatedDSID[0];
+						// If the function is never called,
+						// AssociatedDSID is empty.
+						if (AssociatedDSID.size()) 
+							ID = AssociatedDSID[0];
 						break;
 					}
 					
