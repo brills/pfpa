@@ -2030,8 +2030,12 @@ void PoolAllocate::populateRelatedGEP(void) {
 									AssociatedDSID.push_back(DSNodeToDSIDMap[*DI]);
 								}
 
-								assert(AssociatedDSID.size() != 0);
-								DSIDToPFPAEquivClassMap[AssociatedDSID[0]]->RelatedGEP.push_back(GEP);
+								if (AssociatedDSID.size() == 0) {
+									errs() << "Possible pools for GEP: " << *GEP << " in function " << F.getName() << " cannot be determined. The function is never called?\n"; 
+
+								} else {
+									DSIDToPFPAEquivClassMap[AssociatedDSID[0]]->RelatedGEP.push_back(GEP);
+								}
 							}
 						}
 					}
