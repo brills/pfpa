@@ -1368,15 +1368,20 @@ PoolAllocate::ProcessFunctionBody(Function &F, Function &NewF) {
 
           // Calculate offset from GEP
           unsigned offset = 0;
+          unsigned offsetEnd = 0;
+          unsigned size = 0;
           if(StructType *STy = dyn_cast<StructType>(((PointerType*)pi->getPointerOperandType())->getElementType())){
             const ConstantInt* CUI = cast<ConstantInt>(pi->getOperand(2));
             int FieldNo = CUI->getSExtValue();
-       
-            offset = (unsigned)TD->getStructLayout(STy)->getElementOffset(FieldNo);
-          }
 
-          // Get the size of the element being loaded or stored
-          unsigned size = TD->getTypeAllocSize(((PointerType*)pointerOperand->getType())->getElementType());
+            offset = TD->getStructLayout(STy)->getElementOffset(FieldNo);
+            offsetEnd = TD->getStructLayout(STy)->getSizeInBytes();
+
+            if((FieldNo+1)<STy->getNumElements())
+              offsetEnd = TD->getStructLayout(STy)->getElementOffset(FieldNo+1);
+
+            size = offsetEnd - offset;
+          }
 
 	  Value* sizeValue = ConstantInt::get(Int32Type, size);
 	  Value* offsetValue = ConstantInt::get(Int32Type, offset);

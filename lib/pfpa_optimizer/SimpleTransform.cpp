@@ -139,37 +139,61 @@ namespace {
       map<unsigned, unsigned> offsetToCounts;
 
       // If equivalence class contains more than 1 DSID, combine the statistics and analyze based on that
-      unsigned total = 0;
+      map<unsigned,unsigned> offsetToSize;
+      unsigned max = 0;
       for(set<int>::iterator di = ec->DSIDInClass.begin(), de = ec->DSIDInClass.end(); di!=de; ++di){
         int DSID = *di;
         
         PFPAEquivClass::FreqMapTy stats = ec->DSIDToProfileDataMap[DSID];
+        errs() << "Raw statistics:"<<"\n";
+        unsigned idx = 0;
         for(PFPAEquivClass::FreqMapTy::iterator fr = stats.begin(), fre = stats.end(); 
                         fr!=fre; ++fr){
           unsigned offset = (*fr).first.first;
+          unsigned size = (*fr).first.second;
+          offsetToSize[offset] = size;
+
+          bool ignoreField = false;
+          if(size>10)
+            ignoreField = true;
+
           unsigned count = (*fr).second;
-          errs() << "OS:" << offset << "->" << count << "\n";
-          total += count;
+          errs() << "\t" << offset << "[" << size << "]->" << count << (ignoreField?" *ignoring large field" : "") << "\n";
+
+          if(ignoreField){
+            count = 0;
+          } else {
+            if(count>max)
+              max = count;
+          }
 
           offsetToCounts[offset] += count;
+          idx++;
         }
       }
 
       // Pick the hot fields.
       //
-      // Simple heuristic: If field is accessed more than 20% of all accesses, it is hot.
+      // Simple heuristic: If field is accessed more than 10% of all the max access count of all fields, it is hot.
+      unsigned newSizeEst = 8;
+      errs() << "Picking hot fields:\n";
       map<unsigned,bool> hotMap;
       for(unsigned i=0; i<((const StructType*)type)->getNumElements(); i++){
         unsigned offset = layout->getElementOffset(i);
-        double k = (double)offsetToCounts[offset]/(double)total;
- 
-        errs() << "\t" << offset << ": " << offsetToCounts[offset] << "/" << total << "\n";
-        if(k>.01){
+        double k = (double)offsetToCounts[offset]/(double)max; 
+
+        errs() << "\t" << offset << ": " << offsetToCounts[offset] << "/" << max << "\n";
+        if(k>.1){
+          newSizeEst += offsetToSize[offset];
           hotMap[offset] = true;
         } else {
           isTransformed = true;
         }
       }
+
+      // If the estimated new struct size is no smaller than the original, don't optimize
+      if(layout->getSizeInBytes()<=newSizeEst)
+        isTransformed = false; 
 
       if(isTransformed){
         createNewTypes(ec, hotMap);
