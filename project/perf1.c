@@ -4,7 +4,7 @@
 
 struct list { struct list* next; int hotData; int coldData[1024]; };
 
-struct list* add(struct list* l, int data){
+void add(struct list* l, int data){
   while(l->next)
     l = l->next;
 
