@@ -7,8 +7,11 @@ struct list { struct list* next; int hotData; int coldData[128]; };
 
 void add(struct list* l, int data){
   int i;
-  while(l->next)
+  int hd;
+  while(l->next){
     l = l->next;
+    hd = l->hotData;
+  }
 
   struct list* node = malloc(sizeof(struct list));
   l->next = node;
@@ -27,9 +30,12 @@ struct list* createList(int data){
 
 struct list* get(struct list* l, int idx){
   int i;
+  int hd;
   struct list* node = l;
-  for(i=0; i < idx; i++)
+  for(i=0; i < idx; i++){
     node = node->next;
+    hd = node->hotData;
+  }
 
   return node;
 }
