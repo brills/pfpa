@@ -167,7 +167,7 @@ namespace {
               max = count;
           }
 
-          offsetToCounts[offset] += count;
+          offsetToCounts[offset] += count/ec->DSIDInClass.size();
           idx++;
         }
       }
