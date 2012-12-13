@@ -11,6 +11,7 @@ void generate_list1( struct list ** p, int l) {
 		ptr->next = malloc(sizeof(struct list));
 		ptr = ptr->next;
 	}
+	ptr->next = NULL;
 }
 
 void generate_list2( struct list ** p, int l) {
@@ -36,11 +37,17 @@ int main() {
 	// different visiting pattern: we expect two different data layout
 	// of the same type "struct list"
 	//
-	for (i = 0, p1 = l1; p1->next != NULL; p1 = p1->next) 
+	for (i = 0, p1 = l1; p1->next != NULL; p1 = p1->next, ++i) {
+		if (!(i & 15))
+			p1->field2 = i;
 		p1->field1 = i;
+	}
 
-	for (i = 0, p2 = l2; p2->next != NULL; p2 = p2->next)
+	for (i = 0, p2 = l2; p2->next != NULL; p2 = p2->next, ++i) {
+		if (!(i & 15))
+			p2->field1 = i;
 		p2->field2 = i;
+	}
 
   return 0;
 }
