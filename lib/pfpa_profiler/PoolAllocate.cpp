@@ -1372,7 +1372,7 @@ PoolAllocate::ProcessFunctionBody(Function &F, Function &NewF) {
           unsigned size = 0;
           if(StructType *STy = dyn_cast<StructType>(((PointerType*)pi->getPointerOperandType())->getElementType())){
             const ConstantInt* CUI = cast<ConstantInt>(pi->getOperand(2));
-            int FieldNo = CUI->getSExtValue();
+            unsigned FieldNo = CUI->getSExtValue();
 
             offset = TD->getStructLayout(STy)->getElementOffset(FieldNo);
             offsetEnd = TD->getStructLayout(STy)->getSizeInBytes();
