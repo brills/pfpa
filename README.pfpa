@@ -1,0 +1,59 @@
+README: Profiled Poolalloc
+
+I. Source File
+pfpa is based on poolalloc, and most of source files are derived from poolalloc without modification. Here is a list of files added or modified:
+
+include/poolalloc/PoolAllocate_pfpa_*.h
+lib/pfpa_profiler/PoolAllocate.cpp
+lib/pfpa_optimizer/PoolAllocate.cpp
+lib/pfpa_optimizer/SimpleTransform.cpp
+runtime/pfpa_optimizer_allocator/PoolAllocator.{h,cpp}
+runtime/pfpa_profiler_allocator/PoolAllocator.{h,cpp}
+project/*  (test cases and running script)
+
+II. Building pfpa
+
+Since poolalloc is based on LLVM 3.0, our project also requires LLVM 3.0 for building and running.
+
+Building pfpa is like building any other LLVM projects:
+
+1) Specify LLVM source directory and object directory in autoconf/configure.ac
+2) Run autoconf/AutoRegin.sh
+3) In the directory where object files of pfpa should live in, run $(pfpa_source_dir)/configure
+4) make
+
+Please make sure LLVM is built with assertion enabled. (Configure LLVM with --enable-assertions
+
+III. Running pfpa
+
+Plase see the following shell scripts:
+
+project/compile_profiler
+project/compile_optimizer
+
+You may have to specify the path of the shared library loaded by opt. All libs needed are in $(pfpa_obj_dir)/Release+Asserts/lib.
+
+Typical work flow: 
+
+(Suppose the source file is example.c)
+./compile_profiler example
+./example
+(after running, two files pfpa_memstat.out and pfpa.out are generated)
+./compile_optimizer example
+
+These steps will create:
+example : optimized executable
+example.profiler.bc: profiling instruction inserted LLVM bytecode
+example.optimizer.bc: optimized LLVM bytecode
+
+
+IV. Known Issues
+
+1) Global pools are not supported. A global header pointer will cause poolalloc to create a global pool.
+
+2) All elements of a disjoint data structure should be of the same type. If two data structures are interconnected by a pointer, they will be merged. However, if the pointer can be cast to point to objects of differrent types. In this case, the merged disjoint data structure does not have consistent type. (DSNode is also marked as "Collapsed"). 
+
+3) DSA does not hold type information of a disjoint data structure. pfpa infers this information from the pointer type of GEP instructions that are linked to a DSNode. An assertion failure will occur if two GEPs linked to a DSNode have different pointer type.
+
+
+
